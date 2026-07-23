@@ -112,7 +112,7 @@ const LoginPage: FC<LoginPageProps> = ({ onLoginSuccess }) => {
                     <img
                         src={logoLogin}
                         alt="Logo KBB"
-                        className="w-20 h-20 object-contain"
+                        className="w-40 h-40 object-contain"
                     />
                 </div>
                 <div className="bg-white dark:bg-[#0c111d] p-8 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-xl relative overflow-hidden">
