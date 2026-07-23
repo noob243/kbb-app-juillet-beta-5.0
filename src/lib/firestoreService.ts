@@ -178,13 +178,17 @@ export async function seedCollectionIfEmpty<T extends { id: string | number }>(c
     const colRef = collection(db, collectionName);
     const snap = await getDocs(colRef);
     if (snap.empty && initialData && initialData.length > 0) {
-      console.log(`Seeding Firestore collection: ${collectionName}`);
+      console.log(`Seeding Firestore collection: ${collectionName} with ${initialData.length} items...`);
       for (const item of initialData) {
         const id = item.id;
         const defaulted = cleanAndDefaultRecord(collectionName, item);
         const sanitized = sanitizeForFirestore(defaulted);
+        console.log(`- Writing document: ${collectionName}/${id}`);
         await setDoc(doc(db, collectionName, String(id)), sanitized);
       }
+      console.log(`✅ Collection ${collectionName} seeded successfully.`);
+    } else if (!snap.empty) {
+      console.log(`Collection ${collectionName} already has ${snap.size} documents. Skipping seed.`);
     }
   } catch (error) {
     console.error(`Failed to seed collection ${collectionName}:`, error);
@@ -311,5 +315,30 @@ export async function dbCreateAuditLog(log: Omit<AuditLog, 'id' | 'timestamp'>):
     console.error('Failed to write audit log:', error);
     return null;
   }
+}
+
+/**
+ * Diagnostic tool to verify direct Firestore write capability.
+ */
+export async function testFirestoreConnection() {
+    console.log("--- STARTING FIRESTORE CONNECTION TEST ---");
+    const testId = `test_${Date.now()}`;
+    const testDoc = doc(db, 'connection_tests', testId);
+    try {
+        console.log(`Attempting to write test document to connection_tests/${testId}...`);
+        await setDoc(testDoc, {
+            status: 'success',
+            timestamp: new Date().toISOString(),
+            userAgent: navigator.userAgent,
+            authUid: auth.currentUser?.uid || 'anonymous-pending'
+        });
+        console.log("✅ FIRESTORE WRITE SUCCESSFUL!");
+        return true;
+    } catch (error: any) {
+        console.error("❌ FIRESTORE WRITE FAILED:", error);
+        console.error("Error Code:", error.code);
+        console.error("Error Message:", error.message);
+        return false;
+    }
 }
 

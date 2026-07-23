@@ -38,7 +38,8 @@ import {
     dbDeleteDoc, 
     dbCreateAuditLog,
     syncLocalCollection,
-    forceSeedDatabase
+    forceSeedDatabase,
+    testFirestoreConnection
 } from './lib/firestoreService.ts';
 import {
     initialClients,
@@ -236,30 +237,40 @@ function App() {
     // 1. Establish Firebase Anonymous Authenticaton
     useEffect(() => {
         const initAuth = async () => {
+            console.log("Starting Firebase Anonymous Authentication...");
             try {
                 const cred = await signInAnonymously(auth);
-                console.log("Firebase secure anonymous auth success:", cred.user.uid);
+                console.log("Firebase secure anonymous auth success! UID:", cred.user.uid);
                 setIsDbConnected(true);
 
-                // Initialize/Seed database if completely empty
-                forceSeedDatabase({
-                    clients: initialClients,
-                    cases: initialCases,
-                    events: initialEvents,
-                    avocats: initialAvocats,
-                    tasks: initialTasks,
-                    invoices: initialInvoices,
-                    personnels: initialPersonnels,
-                    fournisseurs: initialFournisseurs,
-                    correspondances: initialCorrespondances,
-                    users: INITIAL_USERS
-                });
+                // Run a diagnostic write test
+                const testResult = await testFirestoreConnection();
+                if (testResult) {
+                    console.log("Diagnostic test passed. Proceeding with database seeding...");
+                    // Initialize/Seed database if completely empty
+                    await forceSeedDatabase({
+                        clients: initialClients,
+                        cases: initialCases,
+                        events: initialEvents,
+                        avocats: initialAvocats,
+                        tasks: initialTasks,
+                        invoices: initialInvoices,
+                        personnels: initialPersonnels,
+                        fournisseurs: initialFournisseurs,
+                        correspondances: initialCorrespondances,
+                        users: INITIAL_USERS
+                    });
+                } else {
+                    console.error("Diagnostic test failed. Database seeding skipped.");
+                }
 
                 triggerToast('success', "Synchronisation réussie avec la base de données !");
-            } catch (err) {
-                console.error("Could not authenticate anonymously on startup:", err);
+            } catch (err: any) {
+                console.error("CRITICAL: Firebase Auth or Initialization failed:", err);
+                console.error("Error Code:", err.code);
+                console.error("Error Message:", err.message);
                 setIsDbConnected(true);
-                triggerToast('success', "Base de données initialisée");
+                triggerToast('error', "Échec de connexion à la base de données.");
             }
         };
         initAuth();
