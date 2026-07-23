@@ -181,7 +181,11 @@ const Sidebar: FC<SidebarProps> = ({ currentPage, setCurrentPage, onLogout, curr
             `}>
                 <div className="text-2xl font-bold mb-6 flex items-center justify-between p-2">
                     <div className="flex items-center">
-                        <svg className="w-8 h-8 mr-2 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z" /></svg>
+                        <img
+                            src="https://drive.google.com/uc?export=view&id=1GW4qFRE3YAgUUEuOn3IVPV3_QQ46wsGg"
+                            alt="Logo KBB"
+                            className="w-12 h-12 mr-3 object-contain"
+                        />
                         <span>KBB App</span>
                     </div>
                     {onClose && (

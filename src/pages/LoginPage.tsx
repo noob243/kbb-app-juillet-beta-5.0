@@ -108,9 +108,11 @@ const LoginPage: FC<LoginPageProps> = ({ onLoginSuccess }) => {
         <div className="min-h-screen bg-slate-50 dark:bg-[#070b13] flex flex-col justify-center items-center p-4 transition-colors duration-200">
             <div className="max-w-md w-full mx-auto">
                 <div className="text-3xl font-bold mb-8 flex items-center justify-center text-[#15447c] dark:text-indigo-400">
-                    <svg className="w-10 h-10 mr-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 21v-8.25M15.75 21v-8.25M8.25 21v-8.25M3 9l9-6 9 6m-1.5 12V10.332A48.36 48.36 0 0012 9.75c-2.551 0-5.056.2-7.5.582V21M3 21h18M12 6.75h.008v.008H12V6.75z" />
-                    </svg>
+                    <img
+                        src="https://drive.google.com/uc?export=view&id=1KCanuuJSTR_jErSZrloCKpUrZ4NfIjn6"
+                        alt="Logo KBB"
+                        className="w-20 h-20 mr-4 object-contain"
+                    />
                     <span>KBB App</span>
                 </div>
                 <div className="bg-white dark:bg-[#0c111d] p-8 rounded-2xl border border-gray-100 dark:border-slate-800 shadow-xl relative overflow-hidden">
