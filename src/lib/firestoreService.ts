@@ -134,7 +134,6 @@ export function cleanAndDefaultRecord(collectionName: string, item: any): any {
 
 // Low-level write wrapper
 export async function dbCreateDoc<T extends { id: string | number }>(collectionName: string, id: string | number, data: Omit<T, 'id'>) {
-  const path = `${collectionName}/${id}`;
   try {
     const docRef = doc(db, collectionName, String(id));
     const defaulted = cleanAndDefaultRecord(collectionName, { ...data, id });
@@ -142,7 +141,8 @@ export async function dbCreateDoc<T extends { id: string | number }>(collectionN
     await setDoc(docRef, sanitized);
     return true;
   } catch (error) {
-    handleFirestoreError(error, OperationType.CREATE, path);
+    console.error(`[Firestore Error] Failed to create document in ${collectionName}:`, error);
+    throw error;
   }
 }
 
@@ -196,7 +196,7 @@ export async function seedCollectionIfEmpty<T extends { id: string | number }>(c
 }
 
 /**
- * Ensures all 14 core collections exist with at least initial data.
+ * Ensures all core collections exist with at least initial data.
  */
 export async function forceSeedDatabase(data: {
   clients: any[],
@@ -211,38 +211,44 @@ export async function forceSeedDatabase(data: {
   users?: any[]
 }) {
   console.log("Starting forced database initialization...");
-  await seedCollectionIfEmpty('clients', data.clients);
-  await seedCollectionIfEmpty('cases', data.cases);
-  await seedCollectionIfEmpty('events', data.events);
-  await seedCollectionIfEmpty('tasks', data.tasks);
-  await seedCollectionIfEmpty('invoices', data.invoices);
-  await seedCollectionIfEmpty('avocats', data.avocats);
-  await seedCollectionIfEmpty('personnels', data.personnels);
-  await seedCollectionIfEmpty('fournisseurs', data.fournisseurs);
-  await seedCollectionIfEmpty('correspondances', data.correspondances);
+  try {
+    await seedCollectionIfEmpty('clients', data.clients);
+    await seedCollectionIfEmpty('cases', data.cases);
+    await seedCollectionIfEmpty('events', data.events);
+    await seedCollectionIfEmpty('tasks', data.tasks);
+    await seedCollectionIfEmpty('invoices', data.invoices);
+    await seedCollectionIfEmpty('avocats', data.avocats);
+    await seedCollectionIfEmpty('personnels', data.personnels);
+    await seedCollectionIfEmpty('fournisseurs', data.fournisseurs);
+    await seedCollectionIfEmpty('correspondances', data.correspondances);
 
-  // Collections that should at least have one document to "exist"
-  await seedCollectionIfEmpty('presences', [{ id: 'system_active', status: 'online', lastSeen: new Date().toISOString() }]);
-  await seedCollectionIfEmpty('messages', [{ id: 'msg_welcome', text: 'Bienvenue sur le chat KBB', sender: 'System', time: new Date().toLocaleTimeString() }]);
-  await seedCollectionIfEmpty('procedures', [{ id: 'PROC_INIT', name: 'Procédure Initiale', status: 'Actif', caseId: 'NONE' }]);
+    // Collections that should at least have one document to "exist"
+    await seedCollectionIfEmpty('presences', [{ id: 'system_active', status: 'online', lastSeen: new Date().toISOString() }]);
+    await seedCollectionIfEmpty('messages', [{ id: 'msg_welcome', text: 'Bienvenue sur le chat KBB', sender: 'System', time: new Date().toLocaleTimeString() }]);
+    await seedCollectionIfEmpty('procedures', [{ id: 'PROC_INIT', name: 'Procédure Initiale', status: 'Actif', caseId: 'NONE' }]);
 
-  if (data.users) {
-     await seedCollectionIfEmpty('users', data.users);
+    if (data.users) {
+      await seedCollectionIfEmpty('users', data.users);
+    }
+
+    // Handle special/empty collections to at least create them by adding a dummy log if empty
+    const dummyLog = {
+      id: 'INIT_SYSTEM',
+      timestamp: new Date().toISOString(),
+      userEmail: 'system@kbb.cd',
+      userName: 'Système',
+      actionType: 'Autre',
+      module: 'Système',
+      description: 'Initialisation de la base de données'
+    };
+    await seedCollectionIfEmpty('auditLogs', [dummyLog]);
+
+    console.log("✅ Database initialization check complete.");
+    return true;
+  } catch (error) {
+    console.error("❌ Critical Seeding Error:", error);
+    throw error;
   }
-
-  // Handle special/empty collections to at least create them by adding a dummy log if empty
-  const dummyLog = {
-    id: 'INIT_SYSTEM',
-    timestamp: new Date().toISOString(),
-    userEmail: 'system@kbb.cd',
-    userName: 'Système',
-    actionType: 'Autre',
-    module: 'Système',
-    description: 'Initialisation de la base de données'
-  };
-  await seedCollectionIfEmpty('auditLogs', [dummyLog]);
-
-  console.log("Database initialization check complete.");
 }
 
 // Bi-directional safety sync: pushes local entries that do not exist in Firestore yet

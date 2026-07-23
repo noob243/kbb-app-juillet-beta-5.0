@@ -260,17 +260,15 @@ function App() {
                         correspondances: initialCorrespondances,
                         users: INITIAL_USERS
                     });
+                    triggerToast('success', "Synchronisation réussie avec la base de données !");
                 } else {
                     console.error("Diagnostic test failed. Database seeding skipped.");
+                    triggerToast('error', "Échec de connexion à la base de données.");
                 }
-
-                triggerToast('success', "Synchronisation réussie avec la base de données !");
             } catch (err: any) {
                 console.error("CRITICAL: Firebase Auth or Initialization failed:", err);
-                console.error("Error Code:", err.code);
-                console.error("Error Message:", err.message);
                 setIsDbConnected(true);
-                triggerToast('error', "Échec de connexion à la base de données.");
+                triggerToast('error', "Échec de connexion Cloud.");
             }
         };
         initAuth();
@@ -810,10 +808,10 @@ function App() {
     const handleAddClient = async (newClient: Omit<Client, 'id'> & { id?: string | number }) => {
         const nextId = newClient.id || (clients.length > 0 ? Math.max(...clients.map(c => typeof c.id === 'number' ? c.id : 0)) : 0) + 1;
         const { id, ...cleanClient } = newClient;
-        const record = { ...cleanClient, id: nextId };
-        setClients(prev => [...prev, record]);
         try {
             await dbCreateDoc('clients', nextId, cleanClient);
+            const record = { ...cleanClient, id: nextId } as Client;
+            setClients(prev => [...prev, record]);
             triggerToast('success', `Client "${newClient.name}" créé avec succès !`);
             logActivity('Ajout', 'Clients', `Création du client "${newClient.name}" (ID: ${nextId})`, cleanClient);
         } catch (err) {
@@ -822,10 +820,10 @@ function App() {
     };
 
     const handleAddCase = async (newCase: Case, tasksToAdd?: Omit<Task, 'id'>[]) => {
-        setCases(prev => [...prev, newCase]);
         try {
             const { id, ...cleanCase } = newCase;
             await dbCreateDoc('cases', id, cleanCase);
+            setCases(prev => [...prev, newCase]);
             logActivity('Ajout', 'Dossiers', `Création du dossier "${newCase.name}" pour le client "${newCase.client}" (Réf: ${id})`, cleanCase);
             
             if (tasksToAdd && tasksToAdd.length > 0) {
@@ -833,9 +831,9 @@ function App() {
                 for (const t of tasksToAdd) {
                     currentMaxId++;
                     const taskProps = { ...t, id: currentMaxId };
-                    setTasks(prev => [...prev, taskProps]);
                     const { id: _, ...cleanTask } = taskProps;
                     await dbCreateDoc('tasks', currentMaxId, cleanTask);
+                    setTasks(prev => [...prev, taskProps]);
                     logActivity('Ajout', 'Tâches', `Création automatique de la tâche "${t.name}" pour le dossier "${newCase.name}"`, cleanTask);
                 }
             }
@@ -846,10 +844,10 @@ function App() {
     };
 
     const handleAddEvent = async (newEvent: Event) => {
-        setEvents(prev => [...prev, newEvent]);
         try {
             const { id, ...cleanEvent } = newEvent;
             await dbCreateDoc('events', id, cleanEvent);
+            setEvents(prev => [...prev, newEvent]);
             triggerToast('success', `Événement "${newEvent.name}" planifié avec succès !`);
             logActivity('Ajout', 'Agenda', `Planification de l'événement "${newEvent.name}" à "${newEvent.lieu}"`, cleanEvent);
         } catch (err) {
@@ -871,10 +869,10 @@ function App() {
 
     const handleAddTask = async (newTask: Omit<Task, 'id'>) => {
         const nextId = (tasks.length > 0 ? Math.max(...tasks.map(t => t.id)) : 0) + 1;
-        const record = { ...newTask, id: nextId };
-        setTasks(prev => [...prev, record]);
+        const record = { ...newTask, id: nextId } as Task;
         try {
             await dbCreateDoc('tasks', nextId, newTask);
+            setTasks(prev => [...prev, record]);
             triggerToast('success', `Tâche "${newTask.name}" programmée avec succès.`);
             logActivity('Ajout', 'Tâches', `Programmation de la tâche "${newTask.name}" pour ${newTask.lawyer}`, newTask);
         } catch (err) {
@@ -895,10 +893,10 @@ function App() {
     };
 
     const handleAddInvoice = async (newInvoice: Invoice) => {
-        setInvoices(prev => [...prev, newInvoice]);
         try {
             const { id, ...cleanInvoice } = newInvoice;
             await dbCreateDoc('invoices', id, cleanInvoice);
+            setInvoices(prev => [...prev, newInvoice]);
             triggerToast('success', `Facture "${newInvoice.id}" émise avec succès !`);
             logActivity('Ajout', 'Facturation', `Émission de la facture "${newInvoice.id}" de ${newInvoice.totalAmount}€ pour le dossier "${newInvoice.caseId}"`, cleanInvoice);
         } catch (err) {
@@ -920,7 +918,6 @@ function App() {
         } catch (authError: any) {
             if (authError?.code === 'auth/email-already-in-use' || authError?.message?.includes('email-already-in-use')) {
                 console.log("Firebase Auth account already exists for lawyer:", newAvocat.emails[0]);
-                triggerToast('info', `Compte d'authentification existant réutilisé pour ${newAvocat.emails[0]}.`);
             } else {
                 console.error("Auth registration error:", authError);
                 triggerToast('error', `Échec d'authentification: ${authError.message || authError}`);
@@ -928,11 +925,11 @@ function App() {
             }
         }
 
-        setAvocats(prev => [...prev, newAvocat]);
         try {
             const { id, ...cleanAvocat } = newAvocat;
             const payload = { ...cleanAvocat, photo: null };
             await dbCreateDoc('avocats', id, payload);
+            setAvocats(prev => [...prev, newAvocat]);
             triggerToast('success', `Profil de l'avocat ${newAvocat.fullName} créé !`);
             logActivity('Ajout', 'Collaborateurs', `Création du profil de l'avocat ${newAvocat.fullName} (${newAvocat.cabinetStatus})`, payload);
         } catch (err) {
@@ -957,7 +954,6 @@ function App() {
             } catch (authError: any) {
                 if (authError?.code === 'auth/email-already-in-use' || authError?.message?.includes('email-already-in-use')) {
                     console.log("Firebase Auth account already exists for personnel:", newPersonnel.email);
-                    triggerToast('info', `Compte d'authentification existant réutilisé pour ${newPersonnel.email}.`);
                 } else {
                     console.error("Auth registration error for personnel:", authError);
                     triggerToast('error', `Échec d'authentification: ${authError.message || authError}`);
@@ -966,10 +962,10 @@ function App() {
             }
         }
 
-        setPersonnels(prev => [...prev, newPersonnel]);
         try {
             const { id, ...cleanPersonnel } = newPersonnel;
             await dbCreateDoc('personnels', id, cleanPersonnel);
+            setPersonnels(prev => [...prev, newPersonnel]);
             triggerToast('success', `Agent administratif "${newPersonnel.fullName}" enregistré !`);
             logActivity('Ajout', 'Personnel', `Création de la fiche de l'agent administratif "${newPersonnel.fullName}" (${newPersonnel.role})`, cleanPersonnel);
         } catch (err) {
@@ -978,10 +974,10 @@ function App() {
     };
 
     const handleAddFournisseur = async (newFournisseur: Fournisseur) => {
-        setFournisseurs(prev => [...prev, newFournisseur]);
         try {
             const { id, ...cleanFournisseur } = newFournisseur;
             await dbCreateDoc('fournisseurs', id, cleanFournisseur);
+            setFournisseurs(prev => [...prev, newFournisseur]);
             triggerToast('success', `Fournisseur "${newFournisseur.nomComplet}" validé !`);
             logActivity('Ajout', 'Fournisseurs', `Création de la fiche du fournisseur "${newFournisseur.nomComplet}"`, cleanFournisseur);
         } catch (err) {
@@ -991,9 +987,9 @@ function App() {
 
     const executeDeleteClient = async (id: number) => {
         const client = clients.find(c => c.id === id);
-        setClients(clients.filter(c => c.id !== id));
         try {
             await dbDeleteDoc('clients', id);
+            setClients(clients.filter(c => c.id !== id));
             triggerToast('success', `Client "${client?.name || id}" révoqué !`);
             logActivity('Suppression', 'Clients', `Suppression définitive du client "${client?.name || id}" (ID: ${id})`);
         } catch (err) {
@@ -1014,9 +1010,9 @@ function App() {
 
     const executeDeleteCase = async (id: string) => {
         const d = cases.find(c => c.id === id);
-        setCases(cases.filter(c => c.id !== id));
         try {
             await dbDeleteDoc('cases', id);
+            setCases(cases.filter(c => c.id !== id));
             triggerToast('success', `Dossier "${d?.name || id}" archivé !`);
             logActivity('Suppression', 'Dossiers', `Archivage / Suppression du dossier "${d?.name || id}" (Réf: ${id})`);
         } catch (err) {
@@ -1037,9 +1033,9 @@ function App() {
 
     const executeDeleteAvocat = async (id: string) => {
         const a = avocats.find(x => x.id === id);
-        setAvocats(avocats.filter(a => a.id !== id));
         try {
             await dbDeleteDoc('avocats', id);
+            setAvocats(avocats.filter(a => a.id !== id));
             triggerToast('success', `Départ de l'avocat "${a?.fullName || id}" acté !`);
             logActivity('Suppression', 'Collaborateurs', `Suppression du profil de l'avocat ${a?.fullName || id}`);
         } catch (err) {
@@ -1060,9 +1056,9 @@ function App() {
 
     const executeDeletePersonnel = async (id: string) => {
         const p = personnels.find(x => x.id === id);
-        setPersonnels(personnels.filter(p => p.id !== id));
         try {
             await dbDeleteDoc('personnels', id);
+            setPersonnels(personnels.filter(p => p.id !== id));
             triggerToast('success', `Agent administratif "${p?.fullName || id}" retiré !`);
             logActivity('Suppression', 'Personnel', `Suppression de la fiche de l'agent administratif "${p?.fullName || id}"`);
         } catch (err) {
@@ -1083,9 +1079,9 @@ function App() {
 
     const executeDeleteFournisseur = async (id: string) => {
         const f = fournisseurs.find(x => x.id === id);
-        setFournisseurs(fournisseurs.filter(f => f.id !== id));
         try {
             await dbDeleteDoc('fournisseurs', id);
+            setFournisseurs(fournisseurs.filter(f => f.id !== id));
             triggerToast('success', `Fournisseur "${f?.nomComplet || id}" retiré avec succès.`);
             logActivity('Suppression', 'Fournisseurs', `Suppression définitive du fournisseur "${f?.nomComplet || id}"`);
         } catch (err) {
@@ -1106,9 +1102,9 @@ function App() {
 
     const executeDeleteEvent = async (id: string) => {
         const ev = events.find(e => e.id === id);
-        setEvents(events.filter(e => e.id !== id));
         try {
             await dbDeleteDoc('events', id);
+            setEvents(events.filter(e => e.id !== id));
             triggerToast('success', `Événement "${ev?.name || id}" déprogrammé.`);
             logActivity('Suppression', 'Agenda', `Annulation de l'événement "${ev?.name || id}"`);
         } catch (err) {
@@ -1129,9 +1125,9 @@ function App() {
 
     const executeDeleteTask = async (id: number) => {
         const t = tasks.find(x => x.id === id);
-        setTasks(tasks.filter(t => t.id !== id));
         try {
             await dbDeleteDoc('tasks', id);
+            setTasks(tasks.filter(t => t.id !== id));
             triggerToast('success', `Tâche "${t?.name || id}" supprimée.`);
         } catch (err) {
             triggerToast('error', "Échec d'annulation de la tâche.");
@@ -1150,9 +1146,9 @@ function App() {
     };
 
     const executeDeleteInvoice = async (id: string) => {
-        setInvoices(invoices.filter(i => i.id !== id));
         try {
             await dbDeleteDoc('invoices', id);
+            setInvoices(invoices.filter(i => i.id !== id));
             triggerToast('success', `Facture "${id}" éliminée !`);
         } catch (err) {
             triggerToast('error', "Échec d'annulation de la facture.");
@@ -1169,10 +1165,10 @@ function App() {
     };
 
     const handleUpdateClient = async (updated: Client) => {
-        setClients(prev => prev.map(c => c.id === updated.id ? updated : c));
         try {
             const { id, ...properties } = updated;
             await dbUpdateDoc('clients', id, properties);
+            setClients(prev => prev.map(c => c.id === updated.id ? updated : c));
             triggerToast('success', `Données du client "${updated.name}" sauvegardées !`);
         } catch (err) {
             triggerToast('error', "Échec lors de la mise à jour.");
@@ -1180,7 +1176,6 @@ function App() {
     };
 
     const handleUpdateCase = async (updated: Case) => {
-        setCases(prev => prev.map(c => c.id === updated.id ? updated : c));
         try {
             const { id, ...properties } = updated;
             const clean = {
@@ -1188,6 +1183,7 @@ function App() {
                 procedures: Array.isArray(updated.procedures) ? updated.procedures : []
             };
             await dbUpdateDoc('cases', id, clean);
+            setCases(prev => prev.map(c => c.id === updated.id ? updated : c));
             triggerToast('success', `Modifications du dossier "${updated.name}" validées !`);
         } catch (err) {
             triggerToast('error', "Erreur lors de la mise à jour.");
@@ -1195,11 +1191,11 @@ function App() {
     };
 
     const handleUpdateAvocat = async (updated: Avocat) => {
-        setAvocats(prev => prev.map(a => a.id === updated.id ? updated : a));
         try {
             const { id, ...properties } = updated;
             const clean = { ...properties, photo: null };
             await dbUpdateDoc('avocats', id, clean);
+            setAvocats(prev => prev.map(a => a.id === updated.id ? updated : a));
             triggerToast('success', `Profil de l'avocat "${updated.fullName}" ajusté !`);
         } catch (err) {
             triggerToast('error', "Échec de restructuration de la fiche.");
@@ -1207,10 +1203,10 @@ function App() {
     };
 
     const handleUpdatePersonnel = async (updated: Personnel) => {
-        setPersonnels(prev => prev.map(p => p.id === updated.id ? updated : p));
         try {
             const { id, ...properties } = updated;
             await dbUpdateDoc('personnels', id, properties);
+            setPersonnels(prev => prev.map(p => p.id === updated.id ? updated : p));
             triggerToast('success', `Modification de l'agent "${updated.fullName}" enregistrée !`);
         } catch (err) {
             triggerToast('error', "Impossible d'appliquer la correction.");
@@ -1218,21 +1214,21 @@ function App() {
     };
 
     const handleUpdateInvoice = async (updated: Invoice) => {
-        setInvoices(prev => prev.map(i => i.id === updated.id ? updated : i));
         try {
             const { id, ...properties } = updated;
             await dbUpdateDoc('invoices', id, properties);
-            triggerToast('success', `Données de la facture "${updated.id}" sauvegardées !`);
+            setInvoices(prev => prev.map(i => i.id === updated.id ? updated : i));
+            triggerToast('success', `Données de la factures "${updated.id}" sauvegardées !`);
         } catch (err) {
             triggerToast('error', "Échec lors de la mise à jour de la facture.");
         }
     };
 
     const handleUpdateFournisseur = async (updated: Fournisseur) => {
-        setFournisseurs(prev => prev.map(f => f.id === updated.id ? updated : f));
         try {
             const { id, ...properties } = updated;
             await dbUpdateDoc('fournisseurs', id, properties);
+            setFournisseurs(prev => prev.map(f => f.id === updated.id ? updated : f));
             triggerToast('success', `Données du fournisseur "${updated.nomComplet}" sauvegardées !`);
         } catch (err) {
             triggerToast('error', "Échec lors de la mise à jour du fournisseur.");
