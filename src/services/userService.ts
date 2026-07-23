@@ -4,7 +4,6 @@ import { db } from '../firebase';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, onSnapshot } from 'firebase/firestore';
 import { sanitizeForFirestore } from '../lib/firestoreService';
 
-const LOCAL_STORAGE_KEY = 'kbb_users_db_v2';
 
 export const INITIAL_USERS: AppUser[] = [
   {
@@ -135,22 +134,8 @@ export const INITIAL_USERS: AppUser[] = [
 export async function syncUsersWithFirestore(onUpdate: (users: AppUser[]) => void): Promise<() => void> {
   const usersRef = collection(db, 'users');
 
-  // Load from local storage cache first if available
-  const cachedUsersStr = localStorage.getItem('kbb_cache_users');
-  if (cachedUsersStr) {
-    try {
-      const cached = JSON.parse(cachedUsersStr);
-      if (Array.isArray(cached) && cached.length > 0) {
-        onUpdate(cached);
-      } else {
-        onUpdate(INITIAL_USERS);
-      }
-    } catch (e) {
-      onUpdate(INITIAL_USERS);
-    }
-  } else {
-    onUpdate(INITIAL_USERS);
-  }
+  // Direct start with INITIAL_USERS until Firestore responds
+  onUpdate(INITIAL_USERS);
 
   // Subscribe to real-time changes in Firestore
   const unsub = onSnapshot(usersRef, (snapshot) => {
@@ -172,21 +157,10 @@ export async function syncUsersWithFirestore(onUpdate: (users: AppUser[]) => voi
       remoteUsers.push(docSnap.data() as AppUser);
     });
     if (remoteUsers.length > 0) {
-      localStorage.setItem('kbb_cache_users', JSON.stringify(remoteUsers));
       onUpdate(remoteUsers);
     }
   }, (error) => {
-    console.warn("Users subscription notice (Quota/Network): falling back to local cache", error?.message);
-    const cachedUsersStr = localStorage.getItem('kbb_cache_users');
-    if (cachedUsersStr) {
-      try {
-        const cached = JSON.parse(cachedUsersStr);
-        if (Array.isArray(cached) && cached.length > 0) {
-          onUpdate(cached);
-          return;
-        }
-      } catch (e) {}
-    }
+    console.error("Users subscription error:", error?.message);
     onUpdate(INITIAL_USERS);
   });
 

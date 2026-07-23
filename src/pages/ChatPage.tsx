@@ -1,6 +1,5 @@
 import React, { FC, useState } from 'react';
 import { ChatIcon } from '../components/Icons';
-import { mockPersonnel, initialConversations } from '../data/mockData';
 
 interface ForumReply {
     id: number;
@@ -104,7 +103,7 @@ const ChatPage: FC<ChatPageProps> = ({ avocats, personnels, currentUserInfo, pre
 
     // --- Direct Messages State ---
     const [selectedContact, setSelectedContact] = useState<{ name: string; role: string; email: string; status: 'online' | 'offline' } | null>(null);
-    const [conversations, setConversations] = useState(initialConversations);
+    const [conversations, setConversations] = useState<{ [key: string]: { sender: string; text: string; time: string }[] }>({});
     const [newMessage, setNewMessage] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
 

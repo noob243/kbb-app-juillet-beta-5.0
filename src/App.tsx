@@ -48,25 +48,6 @@ import { ALL_MODULE_PERMISSIONS } from './services/rbacService';
 
 declare const jspdf: any;
 
-const loadLocalCache = <T,>(key: string): T[] => {
-    try {
-        const stored = localStorage.getItem(key);
-        if (stored) {
-            const parsed = JSON.parse(stored);
-            if (Array.isArray(parsed)) return parsed;
-        }
-    } catch (e) {}
-    return [];
-};
-
-const saveLocalCache = <T,>(key: string, data: T[]) => {
-    try {
-        if (Array.isArray(data)) {
-            localStorage.setItem(key, JSON.stringify(data));
-        }
-    } catch (e) {}
-};
-
 function App() {
     const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
         try { return sessionStorage.getItem('kbb_auth') === 'true'; } catch (e) { return false; }
@@ -147,17 +128,17 @@ function App() {
     const [activeAlarmTask, setActiveAlarmTask] = useState<Task | null>(null);
     const stopActiveAlarmRef = React.useRef<(() => void) | null>(null);
     
-    // Core collection states initialized with local cache for offline/quota resiliency
-    const [clients, setClients] = useState<Client[]>(() => loadLocalCache('kbb_cache_clients'));
-    const [cases, setCases] = useState<Case[]>(() => loadLocalCache('kbb_cache_cases'));
-    const [events, setEvents] = useState<Event[]>(() => loadLocalCache('kbb_cache_events'));
-    const [tasks, setTasks] = useState<Task[]>(() => loadLocalCache('kbb_cache_tasks'));
-    const [invoices, setInvoices] = useState<Invoice[]>(() => loadLocalCache('kbb_cache_invoices'));
-    const [avocats, setAvocats] = useState<Avocat[]>(() => loadLocalCache('kbb_cache_avocats'));
-    const [personnels, setPersonnels] = useState<Personnel[]>(() => loadLocalCache('kbb_cache_personnels'));
-    const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>(() => loadLocalCache('kbb_cache_fournisseurs'));
-    const [logs, setLogs] = useState<AuditLog[]>(() => loadLocalCache('kbb_cache_auditLogs'));
-    const [correspondances, setCorrespondances] = useState<Correspondance[]>(() => loadLocalCache('kbb_cache_correspondances'));
+    // Core collection states initialized as empty (direct cloud orientation)
+    const [clients, setClients] = useState<Client[]>([]);
+    const [cases, setCases] = useState<Case[]>([]);
+    const [events, setEvents] = useState<Event[]>([]);
+    const [tasks, setTasks] = useState<Task[]>([]);
+    const [invoices, setInvoices] = useState<Invoice[]>([]);
+    const [avocats, setAvocats] = useState<Avocat[]>([]);
+    const [personnels, setPersonnels] = useState<Personnel[]>([]);
+    const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
+    const [logs, setLogs] = useState<AuditLog[]>([]);
+    const [correspondances, setCorrespondances] = useState<Correspondance[]>([]);
     const [presences, setPresences] = useState<{ [email: string]: any }>({});
 
     const [isDbConnected, setIsDbConnected] = useState(false);
@@ -174,17 +155,6 @@ function App() {
         }
     }, [isDarkMode]);
 
-    useEffect(() => { saveLocalCache('kbb_cache_clients', clients); }, [clients]);
-    useEffect(() => { saveLocalCache('kbb_cache_cases', cases); }, [cases]);
-    useEffect(() => { saveLocalCache('kbb_cache_events', events); }, [events]);
-    useEffect(() => { saveLocalCache('kbb_cache_tasks', tasks); }, [tasks]);
-    useEffect(() => { saveLocalCache('kbb_cache_invoices', invoices); }, [invoices]);
-    useEffect(() => { saveLocalCache('kbb_cache_avocats', avocats); }, [avocats]);
-    useEffect(() => { saveLocalCache('kbb_cache_personnels', personnels); }, [personnels]);
-    useEffect(() => { saveLocalCache('kbb_cache_fournisseurs', fournisseurs); }, [fournisseurs]);
-    useEffect(() => { saveLocalCache('kbb_cache_auditLogs', logs); }, [logs]);
-    useEffect(() => { saveLocalCache('kbb_cache_correspondances', correspondances); }, [correspondances]);
-
     useEffect(() => {
         const colRef = collection(db, 'correspondances');
         const unsub = onSnapshot(colRef, (snapshot) => {
@@ -197,9 +167,7 @@ function App() {
                 setCorrespondances(list);
             }
         }, (err) => {
-            console.warn("Correspondances subscription notice (Quota/Offline):", err?.message);
-            const cached = loadLocalCache<Correspondance>('kbb_cache_correspondances');
-            if (cached.length > 0) setCorrespondances(cached);
+            console.error("Correspondances subscription error:", err?.message);
         });
         return () => unsub();
     }, [isDbConnected]);
@@ -259,11 +227,11 @@ function App() {
                 const cred = await signInAnonymously(auth);
                 console.log("Firebase secure anonymous auth success:", cred.user.uid);
                 setIsDbConnected(true);
-                triggerToast('success', "Synchronisation réussie avec la base de données (app-data-base-kbb-2026) !");
+                triggerToast('success', "Synchronisation réussie avec la base de données !");
             } catch (err) {
-                console.warn("Could not authenticate anonymously on startup:", err);
-                setIsDbConnected(true); // fall back to offline storage while trying queries
-                triggerToast('success', "Base de données initialisée (app-data-base-kbb-2026)");
+                console.error("Could not authenticate anonymously on startup:", err);
+                setIsDbConnected(true);
+                triggerToast('success', "Base de données initialisée");
             }
         };
         initAuth();
@@ -286,21 +254,9 @@ function App() {
                 });
             });
             list.sort((a, b) => String(a.id).localeCompare(String(b.id)));
-            if (list.length > 0) {
-                setClients(list);
-            } else {
-                const cached = loadLocalCache<Client>('kbb_cache_clients');
-                if (cached.length > 0) {
-                    setClients(cached);
-                    syncLocalCollection('clients', cached);
-                } else {
-                    setClients([]);
-                }
-            }
+            setClients(list);
         }, (err) => {
-            console.warn("Clients subscription notice (Quota/Offline):", err?.message);
-            const cached = loadLocalCache<Client>('kbb_cache_clients');
-            if (cached.length > 0) setClients(cached);
+            console.error("Clients subscription error:", err?.message);
         });
 
         const unsubCases = onSnapshot(collection(db, 'cases'), (snap) => {
@@ -309,28 +265,16 @@ function App() {
                 const data = d.data() as any;
                 list.push({
                     id: data.id || d.id,
-                    name: data.name || data.title || data.nom || 'Dossier Sans Titre',
+                    name: data.name || data.nom || data.fullName || data.clientName || 'Dossier Sans Titre',
                     client: data.client || data.clientName || 'Client inconnu',
                     status: data.status || 'Nouveau',
                     nextHearing: data.nextHearing || null,
                     ...data
                 });
             });
-            if (list.length > 0) {
-                setCases(list);
-            } else {
-                const cached = loadLocalCache<Case>('kbb_cache_cases');
-                if (cached.length > 0) {
-                    setCases(cached);
-                    syncLocalCollection('cases', cached);
-                } else {
-                    setCases([]);
-                }
-            }
+            setCases(list);
         }, (err) => {
-            console.warn("Cases subscription notice (Quota/Offline):", err?.message);
-            const cached = loadLocalCache<Case>('kbb_cache_cases');
-            if (cached.length > 0) setCases(cached);
+            console.error("Cases subscription error:", err?.message);
         });
 
         const unsubEvents = onSnapshot(collection(db, 'events'), (snap) => {
@@ -346,21 +290,9 @@ function App() {
                     ...data
                 });
             });
-            if (list.length > 0) {
-                setEvents(list);
-            } else {
-                const cached = loadLocalCache<Event>('kbb_cache_events');
-                if (cached.length > 0) {
-                    setEvents(cached);
-                    syncLocalCollection('events', cached);
-                } else {
-                    setEvents([]);
-                }
-            }
+            setEvents(list);
         }, (err) => {
-            console.warn("Events subscription notice (Quota/Offline):", err?.message);
-            const cached = loadLocalCache<Event>('kbb_cache_events');
-            if (cached.length > 0) setEvents(cached);
+            console.error("Events subscription error:", err?.message);
         });
 
         const unsubTasks = onSnapshot(collection(db, 'tasks'), (snap) => {
@@ -378,21 +310,9 @@ function App() {
                 });
             });
             list.sort((a, b) => String(a.id).localeCompare(String(b.id)));
-            if (list.length > 0) {
-                setTasks(list);
-            } else {
-                const cached = loadLocalCache<Task>('kbb_cache_tasks');
-                if (cached.length > 0) {
-                    setTasks(cached);
-                    syncLocalCollection('tasks', cached);
-                } else {
-                    setTasks([]);
-                }
-            }
+            setTasks(list);
         }, (err) => {
-            console.warn("Tasks subscription notice (Quota/Offline):", err?.message);
-            const cached = loadLocalCache<Task>('kbb_cache_tasks');
-            if (cached.length > 0) setTasks(cached);
+            console.error("Tasks subscription error:", err?.message);
         });
 
         const unsubInvoices = onSnapshot(collection(db, 'invoices'), (snap) => {
@@ -409,21 +329,9 @@ function App() {
                     ...data
                 });
             });
-            if (list.length > 0) {
-                setInvoices(list);
-            } else {
-                const cached = loadLocalCache<Invoice>('kbb_cache_invoices');
-                if (cached.length > 0) {
-                    setInvoices(cached);
-                    syncLocalCollection('invoices', cached);
-                } else {
-                    setInvoices([]);
-                }
-            }
+            setInvoices(list);
         }, (err) => {
-            console.warn("Invoices subscription notice (Quota/Offline):", err?.message);
-            const cached = loadLocalCache<Invoice>('kbb_cache_invoices');
-            if (cached.length > 0) setInvoices(cached);
+            console.error("Invoices subscription error:", err?.message);
         });
 
         const unsubAvocats = onSnapshot(collection(db, 'avocats'), (snap) => {
@@ -441,103 +349,43 @@ function App() {
                     ...data
                 });
             });
-            if (list.length > 0) {
-                setAvocats(list);
-            } else {
-                const cached = loadLocalCache<Avocat>('kbb_cache_avocats');
-                if (cached.length > 0) {
-                    setAvocats(cached);
-                    syncLocalCollection('avocats', cached);
-                } else {
-                    setAvocats([]);
-                }
-            }
+            setAvocats(list);
         }, (err) => {
-            console.warn("Avocats subscription notice (Quota/Offline):", err?.message);
-            const cached = loadLocalCache<Avocat>('kbb_cache_avocats');
-            if (cached.length > 0) setAvocats(cached);
+            console.error("Avocats subscription error:", err?.message);
         });
 
         const unsubPersonnels = onSnapshot(collection(db, 'personnels'), (snap) => {
             const list: Personnel[] = [];
             snap.forEach(d => list.push(d.data() as Personnel));
-            if (list.length > 0) {
-                setPersonnels(list);
-            } else {
-                const cached = loadLocalCache<Personnel>('kbb_cache_personnels');
-                if (cached.length > 0) {
-                    setPersonnels(cached);
-                    syncLocalCollection('personnels', cached);
-                } else {
-                    setPersonnels([]);
-                }
-            }
+            setPersonnels(list);
         }, (err) => {
-            console.warn("Personnels subscription notice (Quota/Offline):", err?.message);
-            const cached = loadLocalCache<Personnel>('kbb_cache_personnels');
-            if (cached.length > 0) setPersonnels(cached);
+            console.error("Personnels subscription error:", err?.message);
         });
 
         const unsubFournisseurs = onSnapshot(collection(db, 'fournisseurs'), (snap) => {
             const list: Fournisseur[] = [];
             snap.forEach(d => list.push(d.data() as Fournisseur));
-            if (list.length > 0) {
-                setFournisseurs(list);
-            } else {
-                const cached = loadLocalCache<Fournisseur>('kbb_cache_fournisseurs');
-                if (cached.length > 0) {
-                    setFournisseurs(cached);
-                    syncLocalCollection('fournisseurs', cached);
-                } else {
-                    setFournisseurs([]);
-                }
-            }
+            setFournisseurs(list);
         }, (err) => {
-            console.warn("Fournisseurs subscription notice (Quota/Offline):", err?.message);
-            const cached = loadLocalCache<Fournisseur>('kbb_cache_fournisseurs');
-            if (cached.length > 0) setFournisseurs(cached);
+            console.error("Fournisseurs subscription error:", err?.message);
         });
 
         const unsubLogs = onSnapshot(collection(db, 'auditLogs'), (snap) => {
             const list: AuditLog[] = [];
             snap.forEach(d => list.push(d.data() as AuditLog));
             list.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
-            if (list.length > 0) {
-                setLogs(list);
-            } else {
-                const cached = loadLocalCache<AuditLog>('kbb_cache_auditLogs');
-                if (cached.length > 0) {
-                    setLogs(cached);
-                    syncLocalCollection('auditLogs', cached);
-                } else {
-                    setLogs([]);
-                }
-            }
+            setLogs(list);
         }, (err) => {
-            console.warn("AuditLogs subscription notice (Quota/Offline):", err?.message);
-            const cached = loadLocalCache<AuditLog>('kbb_cache_auditLogs');
-            if (cached.length > 0) setLogs(cached);
+            console.error("AuditLogs subscription error:", err?.message);
         });
 
         const unsubCorrespondances = onSnapshot(collection(db, 'correspondances'), (snap) => {
             const list: Correspondance[] = [];
             snap.forEach(d => list.push(d.data() as Correspondance));
             list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-            if (list.length > 0) {
-                setCorrespondances(list);
-            } else {
-                const cached = loadLocalCache<Correspondance>('kbb_cache_correspondances');
-                if (cached.length > 0) {
-                    setCorrespondances(cached);
-                    syncLocalCollection('correspondances', cached);
-                } else {
-                    setCorrespondances([]);
-                }
-            }
+            setCorrespondances(list);
         }, (err) => {
-            console.warn("Correspondances subscription notice (Quota/Offline):", err?.message);
-            const cached = loadLocalCache<Correspondance>('kbb_cache_correspondances');
-            if (cached.length > 0) setCorrespondances(cached);
+            console.error("Correspondances subscription error:", err?.message);
         });
 
         const unsubPresences = onSnapshot(collection(db, 'presences'), (snap) => {
@@ -547,7 +395,7 @@ function App() {
             });
             setPresences(map);
         }, (err) => {
-            console.warn("Presences subscription notice (Quota/Offline):", err?.message);
+            console.error("Presences subscription error:", err?.message);
         });
 
         setIsSyncComplete(true);

@@ -90,17 +90,7 @@ export const CorrespondancePage: FC<CorrespondancePageProps> = ({
                 setCorrespondances(initialCorrespondances);
             }
         }, (err) => {
-            console.warn("Correspondances subscription notice (Quota/Offline): falling back to local cache", err);
-            try {
-                const cached = localStorage.getItem('kbb_cache_correspondances');
-                if (cached) {
-                    const parsed = JSON.parse(cached);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        setCorrespondances(parsed);
-                        return;
-                    }
-                }
-            } catch (e) {}
+            console.error("Correspondances subscription error:", err);
             setCorrespondances(initialCorrespondances);
         });
 

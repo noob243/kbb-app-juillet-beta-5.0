@@ -84,16 +84,7 @@ const GestionPage: FC<GestionPageProps> = (props) => {
             list.sort((a, b) => b.date.localeCompare(a.date));
             setCorrespondances(list);
         }, (err) => {
-            console.warn("Notice loading correspondances in admin (Quota/Offline):", err);
-            try {
-                const cached = localStorage.getItem('kbb_cache_correspondances');
-                if (cached) {
-                    const parsed = JSON.parse(cached);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        setCorrespondances(parsed);
-                    }
-                }
-            } catch (e) {}
+            console.error("Notice loading correspondances in admin error:", err);
         });
         return () => unsub();
     }, []);
