@@ -4,6 +4,7 @@ import { Icon, DashboardIcon, ClientsIcon, CasesIcon, EventsIcon, AgendaIcon, Ch
 import { AppUser, ModuleKey } from '../types/rbac';
 import { hasPermission } from '../services/rbacService';
 import { getLocalUsers } from '../services/userService';
+import logoSidebar from '../assets/logo-sidebar.png';
 
 interface SidebarProps {
   currentPage: string;
@@ -182,7 +183,7 @@ const Sidebar: FC<SidebarProps> = ({ currentPage, setCurrentPage, onLogout, curr
                 <div className="text-2xl font-bold mb-6 flex items-center justify-between p-2">
                     <div className="flex items-center">
                         <img
-                            src="https://drive.google.com/uc?export=view&id=1GW4qFRE3YAgUUEuOn3IVPV3_QQ46wsGg"
+                            src={logoSidebar}
                             alt="Logo KBB"
                             className="w-12 h-12 mr-3 object-contain"
                         />

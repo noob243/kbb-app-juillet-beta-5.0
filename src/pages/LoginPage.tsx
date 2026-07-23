@@ -4,6 +4,7 @@ import { auth } from '../firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
 import { getLocalUsers } from '../services/userService';
 import { AppUser } from '../types/rbac';
+import logoLogin from '../assets/logo-login.png';
 
 interface LoginPageProps {
   onLoginSuccess: (email: string, userObj?: AppUser | null) => void;
@@ -109,7 +110,7 @@ const LoginPage: FC<LoginPageProps> = ({ onLoginSuccess }) => {
             <div className="max-w-md w-full mx-auto">
                 <div className="text-3xl font-bold mb-8 flex items-center justify-center text-[#15447c] dark:text-indigo-400">
                     <img
-                        src="https://drive.google.com/uc?export=view&id=1KCanuuJSTR_jErSZrloCKpUrZ4NfIjn6"
+                        src={logoLogin}
                         alt="Logo KBB"
                         className="w-20 h-20 mr-4 object-contain"
                     />
