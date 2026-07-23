@@ -20,11 +20,13 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 console.log("Firebase App Initialized:", app.name);
 console.log("Firestore Project ID:", firebaseConfig.projectId);
 
-export const db = firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)' 
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
-  : getFirestore(app);
+// Handle both "(default)" and "default" as the default database
+const dbId = firebaseConfig.firestoreDatabaseId;
+const isDefault = !dbId || dbId === '(default)' || dbId === 'default';
 
-console.log("Firestore Database Instance assigned.");
+export const db = isDefault ? getFirestore(app) : getFirestore(app, dbId);
+
+console.log("Firestore Database Instance assigned (ID:", isDefault ? "(default)" : dbId, ")");
 export const auth = getAuth(app);
 export const googleAuthProvider = new GoogleAuthProvider();
 
