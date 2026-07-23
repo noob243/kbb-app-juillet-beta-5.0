@@ -4,13 +4,11 @@ import { UserIcon } from '../components/Icons';
 import { Client, Case, Event, Task, Invoice, Avocat, Personnel, Fournisseur, Correspondance, CaseProcedure } from '../types';
 import { DetailedEditModal } from '../components/DetailedEditModal';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { collection, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebase';
-import { dbUpdateDoc, dbDeleteDoc, dbCreateAuditLog } from '../lib/firestoreService';
+import { apiService } from '../services/api';
 import { UserManagementTab } from '../components/admin/UserManagementTab';
 import { CabinetManagementTab } from '../components/admin/CabinetManagementTab';
 import { AppUser } from '../types/rbac';
-import { syncUsersWithFirestore } from '../services/userService';
+import { syncUsersWithBackend } from '../services/userService';
 
 interface GestionPageProps {
     clients: Client[];
@@ -61,7 +59,7 @@ const GestionPage: FC<GestionPageProps> = (props) => {
 
     useEffect(() => {
         let unsub: (() => void) | undefined;
-        syncUsersWithFirestore((latest) => {
+        syncUsersWithBackend((latest) => {
             setUsersList(latest);
         }).then(cleanup => {
             unsub = cleanup;
@@ -71,32 +69,35 @@ const GestionPage: FC<GestionPageProps> = (props) => {
         };
     }, []);
 
-    // Synchronized Correspondances with Firestore
+    // Synchronized Correspondances via API (Polling fallback)
     const [correspondances, setCorrespondances] = useState<Correspondance[]>([]);
 
     useEffect(() => {
-        const unsub = onSnapshot(collection(db, 'correspondances'), (snapshot) => {
-            const list: Correspondance[] = [];
-            snapshot.forEach((doc) => {
-                list.push(doc.data() as Correspondance);
-            });
-            // Sort by date desc
-            list.sort((a, b) => b.date.localeCompare(a.date));
-            setCorrespondances(list);
-        }, (err) => {
-            console.error("Notice loading correspondances in admin error:", err);
-        });
-        return () => unsub();
+        const fetchCorrs = async () => {
+            try {
+                const list = await apiService.correspondances.getAll();
+                list.sort((a: any, b: any) => b.date.localeCompare(a.date));
+                setCorrespondances(list);
+            } catch (err) {
+                console.error("Notice loading correspondances in admin error:", err);
+            }
+        };
+
+        fetchCorrs();
+        const interval = setInterval(fetchCorrs, 30000);
+        return () => clearInterval(interval);
     }, []);
 
     const handleUpdateCorrespondance = async (updated: Correspondance) => {
         try {
-            const { id, ...properties } = updated;
-            await dbUpdateDoc('correspondances', id, properties);
-            await dbCreateAuditLog({
+            await apiService.correspondances.update(updated.id, updated);
+            await apiService.auditLogs.create({
                 actionType: 'Modification',
                 module: 'Correspondance',
-                description: `Modification de la correspondance Réf: ${id} via la Console d'Administration`
+                description: `Modification de la correspondance Réf: ${updated.id} via la Console d'Administration`,
+                userEmail: props.currentUser?.email || "admin",
+                userName: props.currentUser?.fullName || "Admin",
+                timestamp: new Date().toISOString()
             });
         } catch (err) {
             console.error("Failed to update correspondance in admin:", err);
@@ -108,11 +109,14 @@ const GestionPage: FC<GestionPageProps> = (props) => {
             return;
         }
         try {
-            await dbDeleteDoc('correspondances', id);
-            await dbCreateAuditLog({
+            await apiService.correspondances.delete(id);
+            await apiService.auditLogs.create({
                 actionType: 'Suppression',
                 module: 'Correspondance',
-                description: `Suppression de la correspondance Réf: ${id} via la Console d'Administration`
+                description: `Suppression de la correspondance Réf: ${id} via la Console d'Administration`,
+                userEmail: props.currentUser?.email || "admin",
+                userName: props.currentUser?.fullName || "Admin",
+                timestamp: new Date().toISOString()
             });
         } catch (err) {
             console.error("Failed to delete correspondance in admin:", err);

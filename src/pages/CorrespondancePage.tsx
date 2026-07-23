@@ -1,13 +1,5 @@
 import React, { FC, useState, useEffect, useMemo } from 'react';
-import { collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
-import { db } from '../firebase';
-import { 
-    dbCreateDoc, 
-    dbUpdateDoc, 
-    dbDeleteDoc, 
-    dbCreateAuditLog,
-    sanitizeForFirestore
-} from '../lib/firestoreService';
+import { apiService } from '../services/api';
 import { Client, Case, Avocat, Correspondance } from '../types';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -69,27 +61,21 @@ export const CorrespondancePage: FC<CorrespondancePageProps> = ({
         }
     }, [selectedCaseId, recipientName, isWriting, selectedCorr]);
 
-    // Sync state and live subscription to Firestore
+    // Sync state and live subscription to API (Polling fallback)
     useEffect(() => {
-        const colRef = collection(db, 'correspondances');
-        const unsub = onSnapshot(colRef, (snapshot) => {
-            const list: Correspondance[] = [];
-            snapshot.forEach((doc) => {
-                list.push(doc.data() as Correspondance);
-            });
-            if (list.length > 0) {
-                // Sort by date desc
-                list.sort((a, b) => b.date.localeCompare(a.date));
+        const fetchCorrs = async () => {
+            try {
+                const list = await apiService.correspondances.getAll();
+                list.sort((a: any, b: any) => b.date.localeCompare(a.date));
                 setCorrespondances(list);
-            } else {
-                setCorrespondances([]);
+            } catch (err) {
+                console.error("Correspondances fetch error:", err);
             }
-        }, (err) => {
-            console.error("Correspondances subscription error:", err);
-            setCorrespondances([]);
-        });
+        };
 
-        return () => unsub();
+        fetchCorrs();
+        const interval = setInterval(fetchCorrs, 30000);
+        return () => clearInterval(interval);
     }, []);
 
     // Active filters
@@ -177,24 +163,26 @@ export const CorrespondancePage: FC<CorrespondancePageProps> = ({
 
         try {
             if (isEditing) {
-                await dbUpdateDoc('correspondances', id, data);
+                await apiService.correspondances.update(id, data);
                 triggerLocalToast('success', "Correspondance mise à jour !");
-                dbCreateAuditLog({
+                await apiService.auditLogs.create({
                     userEmail: currentUserInfo?.email || "system",
                     userName: currentUserInfo?.name || "System",
                     actionType: 'Modification',
                     module: 'Correspondance',
-                    description: `Mise à jour de la correspondance à destination de ${recipientName} (Objet: ${subject})`
+                    description: `Mise à jour de la correspondance à destination de ${recipientName} (Objet: ${subject})`,
+                    timestamp: new Date().toISOString()
                 });
             } else {
-                await dbCreateDoc('correspondances', id, data);
+                await apiService.correspondances.create(data);
                 triggerLocalToast('success', "Nouvelle correspondance enregistrée !");
-                dbCreateAuditLog({
+                await apiService.auditLogs.create({
                     userEmail: currentUserInfo?.email || "system",
                     userName: currentUserInfo?.name || "System",
                     actionType: 'Ajout',
                     module: 'Correspondance',
-                    description: `Création d'une correspondance pour ${recipientName} (Objet: ${subject})`
+                    description: `Création d'une correspondance pour ${recipientName} (Objet: ${subject})`,
+                    timestamp: new Date().toISOString()
                 });
             }
 
@@ -226,15 +214,16 @@ export const CorrespondancePage: FC<CorrespondancePageProps> = ({
         // Update status to Sent in database
         try {
             const updated = { ...corr, status: 'Envoyé' as const };
-            await dbUpdateDoc('correspondances', corr.id, updated);
+            await apiService.correspondances.update(corr.id, updated);
             setSelectedCorr(updated);
             
-            dbCreateAuditLog({
+            await apiService.auditLogs.create({
                 userEmail: currentUserInfo?.email || "system",
                 userName: currentUserInfo?.name || "System",
                 actionType: 'Modification',
                 module: 'Correspondance',
-                description: `Correspondance envoyée par e-mail à ${corr.recipientName} (${corr.recipientEmail})`
+                description: `Correspondance envoyée par e-mail à ${corr.recipientName} (${corr.recipientEmail})`,
+                timestamp: new Date().toISOString()
             });
         } catch (err) {
             console.error("Error updating correspondence status to sent:", err);
@@ -248,16 +237,17 @@ export const CorrespondancePage: FC<CorrespondancePageProps> = ({
         }
 
         try {
-            await dbDeleteDoc('correspondances', corr.id);
+            await apiService.correspondances.delete(corr.id);
             triggerLocalToast('success', "Correspondance supprimée avec succès !");
             setSelectedCorr(null);
             
-            dbCreateAuditLog({
+            await apiService.auditLogs.create({
                 userEmail: currentUserInfo?.email || "system",
                 userName: currentUserInfo?.name || "System",
                 actionType: 'Suppression',
                 module: 'Correspondance',
-                description: `Suppression de la correspondance pour ${corr.recipientName} (Objet: ${corr.subject})`
+                description: `Suppression de la correspondance pour ${corr.recipientName} (Objet: ${corr.subject})`,
+                timestamp: new Date().toISOString()
             });
         } catch (err) {
             console.error("Error deleting correspondence:", err);

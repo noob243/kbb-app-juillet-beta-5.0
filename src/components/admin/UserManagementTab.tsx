@@ -4,7 +4,7 @@ import { Avocat, Personnel } from '../../types';
 import { ALL_MODULE_PERMISSIONS, DEFAULT_ROLE_PERMISSIONS } from '../../services/rbacService';
 import { createNewUser, restoreUser, softDeleteUser, updateAppUser } from '../../services/userService';
 import { PermissionMatrix } from './PermissionMatrix';
-import { dbCreateDoc, sanitizeForFirestore } from '../../lib/firestoreService';
+import { apiService } from '../../services/api';
 import { FormField, FormInput, FormSelect } from '../common/FormControls';
 
 const BAR_OPTIONS = [
@@ -171,11 +171,11 @@ export const UserManagementTab: FC<UserManagementTabProps> = ({
           bankAccounts: validBankAccounts
         };
 
-        // 1. Save directly to Firestore
+        // 1. Save directly to MongoDB via API
         try {
-          await dbCreateDoc('avocats', newAvocat.id, sanitizeForFirestore(newAvocat));
+          await apiService.avocats.create(newAvocat);
         } catch (err) {
-          console.warn("Firestore avocat insert notice:", err);
+          console.warn("API avocat insert notice:", err);
         }
 
         // 2. Trigger callback if passed
@@ -219,11 +219,11 @@ export const UserManagementTab: FC<UserManagementTabProps> = ({
           bankAccounts: validBankAccounts
         };
 
-        // 1. Save directly to Firestore under personnels
+        // 1. Save directly to MongoDB via API
         try {
-          await dbCreateDoc('personnels', newPersonnel.id, sanitizeForFirestore(newPersonnel));
+          await apiService.personnels.create(newPersonnel);
         } catch (err) {
-          console.warn("Firestore personnel insert notice:", err);
+          console.warn("API personnel insert notice:", err);
         }
 
         // 2. Trigger callback if passed
