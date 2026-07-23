@@ -3,20 +3,18 @@ import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, si
 import { getFirestore } from 'firebase/firestore';
 import firebaseConfigJson from '../firebase-applet-config.json';
 
-const config = firebaseConfigJson || {};
-
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || config.apiKey,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || config.authDomain,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || config.projectId,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || config.storageBucket,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || config.messagingSenderId,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || config.appId,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || config.measurementId
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || firebaseConfigJson.apiKey,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || firebaseConfigJson.authDomain,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || firebaseConfigJson.projectId,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || firebaseConfigJson.storageBucket,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || firebaseConfigJson.messagingSenderId,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || firebaseConfigJson.appId,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || firebaseConfigJson.measurementId
 };
 
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-const dbId = import.meta.env.VITE_FIREBASE_DATABASE_ID || config.firestoreDatabaseId;
+const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const dbId = process.env.NEXT_PUBLIC_FIREBASE_DATABASE_ID || firebaseConfigJson.firestoreDatabaseId;
 const isDefault = !dbId || dbId === '(default)' || dbId === 'default';
 
 export const db = isDefault ? getFirestore(app) : getFirestore(app, dbId);
