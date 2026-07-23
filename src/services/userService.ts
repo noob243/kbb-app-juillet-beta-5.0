@@ -134,13 +134,13 @@ export const INITIAL_USERS: AppUser[] = [
 export async function syncUsersWithFirestore(onUpdate: (users: AppUser[]) => void): Promise<() => void> {
   const usersRef = collection(db, 'users');
 
-  // Direct start with INITIAL_USERS until Firestore responds
-  onUpdate(INITIAL_USERS);
+  // Start with empty list until Firestore responds
+  onUpdate([]);
 
   // Subscribe to real-time changes in Firestore
   const unsub = onSnapshot(usersRef, (snapshot) => {
     if (snapshot.empty) {
-      // Seed default users to the new Firestore database
+      // Seed default users to the new Firestore database if empty
       INITIAL_USERS.forEach(async (u) => {
         try {
           await setDoc(doc(db, 'users', u.id), sanitizeForFirestore(u));
@@ -161,7 +161,7 @@ export async function syncUsersWithFirestore(onUpdate: (users: AppUser[]) => voi
     }
   }, (error) => {
     console.error("Users subscription error:", error?.message);
-    onUpdate(INITIAL_USERS);
+    onUpdate([]);
   });
 
   return unsub;

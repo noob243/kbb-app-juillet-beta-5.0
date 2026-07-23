@@ -82,16 +82,11 @@ export const CorrespondancePage: FC<CorrespondancePageProps> = ({
                 list.sort((a, b) => b.date.localeCompare(a.date));
                 setCorrespondances(list);
             } else {
-                // Seed if empty
-                console.log("Seeding initial correspondances collection in Firestore");
-                initialCorrespondances.forEach(async (item) => {
-                    await setDoc(doc(db, 'correspondances', item.id), sanitizeForFirestore(item));
-                });
-                setCorrespondances(initialCorrespondances);
+                setCorrespondances([]);
             }
         }, (err) => {
             console.error("Correspondances subscription error:", err);
-            setCorrespondances(initialCorrespondances);
+            setCorrespondances([]);
         });
 
         return () => unsub();
