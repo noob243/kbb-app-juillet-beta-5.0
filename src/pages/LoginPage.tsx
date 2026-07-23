@@ -2,8 +2,14 @@
 import React, { FC, useState, useEffect } from 'react';
 import { auth } from '../firebase';
 import { signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { syncUsersWithFirestore } from '../services/userService';
 import { AppUser } from '../types/rbac';
+
+// ✅ Si vous souhaitez enregistrer/synchroniser l'utilisateur dans MongoDB :
+await fetch('/api/users/sync', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ uid: user.uid, email: user.email })
+});
 
 interface LoginPageProps {
   onLoginSuccess: (email: string, userObj?: AppUser | null) => void;
