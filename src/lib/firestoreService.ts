@@ -177,7 +177,7 @@ export async function seedCollectionIfEmpty<T extends { id: string | number }>(c
   try {
     const colRef = collection(db, collectionName);
     const snap = await getDocs(colRef);
-    if (snap.empty) {
+    if (snap.empty && initialData && initialData.length > 0) {
       console.log(`Seeding Firestore collection: ${collectionName}`);
       for (const item of initialData) {
         const id = item.id;
@@ -189,6 +189,56 @@ export async function seedCollectionIfEmpty<T extends { id: string | number }>(c
   } catch (error) {
     console.error(`Failed to seed collection ${collectionName}:`, error);
   }
+}
+
+/**
+ * Ensures all 14 core collections exist with at least initial data.
+ */
+export async function forceSeedDatabase(data: {
+  clients: any[],
+  cases: any[],
+  events: any[],
+  tasks: any[],
+  invoices: any[],
+  avocats: any[],
+  personnels: any[],
+  fournisseurs: any[],
+  correspondances: any[],
+  users?: any[]
+}) {
+  console.log("Starting forced database initialization...");
+  await seedCollectionIfEmpty('clients', data.clients);
+  await seedCollectionIfEmpty('cases', data.cases);
+  await seedCollectionIfEmpty('events', data.events);
+  await seedCollectionIfEmpty('tasks', data.tasks);
+  await seedCollectionIfEmpty('invoices', data.invoices);
+  await seedCollectionIfEmpty('avocats', data.avocats);
+  await seedCollectionIfEmpty('personnels', data.personnels);
+  await seedCollectionIfEmpty('fournisseurs', data.fournisseurs);
+  await seedCollectionIfEmpty('correspondances', data.correspondances);
+
+  // Collections that should at least have one document to "exist"
+  await seedCollectionIfEmpty('presences', [{ id: 'system_active', status: 'online', lastSeen: new Date().toISOString() }]);
+  await seedCollectionIfEmpty('messages', [{ id: 'msg_welcome', text: 'Bienvenue sur le chat KBB', sender: 'System', time: new Date().toLocaleTimeString() }]);
+  await seedCollectionIfEmpty('procedures', [{ id: 'PROC_INIT', name: 'Procédure Initiale', status: 'Actif', caseId: 'NONE' }]);
+
+  if (data.users) {
+     await seedCollectionIfEmpty('users', data.users);
+  }
+
+  // Handle special/empty collections to at least create them by adding a dummy log if empty
+  const dummyLog = {
+    id: 'INIT_SYSTEM',
+    timestamp: new Date().toISOString(),
+    userEmail: 'system@kbb.cd',
+    userName: 'Système',
+    actionType: 'Autre',
+    module: 'Système',
+    description: 'Initialisation de la base de données'
+  };
+  await seedCollectionIfEmpty('auditLogs', [dummyLog]);
+
+  console.log("Database initialization check complete.");
 }
 
 // Bi-directional safety sync: pushes local entries that do not exist in Firestore yet

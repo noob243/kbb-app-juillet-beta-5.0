@@ -37,8 +37,21 @@ import {
     dbUpdateDoc, 
     dbDeleteDoc, 
     dbCreateAuditLog,
-    syncLocalCollection
+    syncLocalCollection,
+    forceSeedDatabase
 } from './lib/firestoreService.ts';
+import {
+    initialClients,
+    initialCases,
+    initialEvents,
+    initialAvocats,
+    initialTasks,
+    initialInvoices,
+    initialPersonnels,
+    initialFournisseurs,
+    initialCorrespondances
+} from './data/mockData.ts';
+import { INITIAL_USERS } from './services/userService.ts';
 import { motion, AnimatePresence } from 'motion/react';
 import EmailComposerModal from './components/modals/EmailComposerModal';
 import { ProtectedGuard } from './components/auth/ProtectedGuard';
@@ -227,6 +240,21 @@ function App() {
                 const cred = await signInAnonymously(auth);
                 console.log("Firebase secure anonymous auth success:", cred.user.uid);
                 setIsDbConnected(true);
+
+                // Initialize/Seed database if completely empty
+                forceSeedDatabase({
+                    clients: initialClients,
+                    cases: initialCases,
+                    events: initialEvents,
+                    avocats: initialAvocats,
+                    tasks: initialTasks,
+                    invoices: initialInvoices,
+                    personnels: initialPersonnels,
+                    fournisseurs: initialFournisseurs,
+                    correspondances: initialCorrespondances,
+                    users: INITIAL_USERS
+                });
+
                 triggerToast('success', "Synchronisation réussie avec la base de données !");
             } catch (err) {
                 console.error("Could not authenticate anonymously on startup:", err);

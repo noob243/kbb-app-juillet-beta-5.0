@@ -226,6 +226,16 @@ service cloud.firestore {
       allow read, write: if isSignedIn();
     }
 
+    // Messages / Chat rules
+    match /messages/{messageId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // Procedures rules
+    match /procedures/{procedureId} {
+      allow read, write: if isSignedIn();
+    }
+
     // Correspondances rules
     match /correspondances/{correspondanceId} {
       allow read: if isSignedIn();
