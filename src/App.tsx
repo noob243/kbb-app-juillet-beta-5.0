@@ -33,7 +33,7 @@ import EmailComposerModal from './components/modals/EmailComposerModal';
 import { ProtectedGuard } from './components/auth/ProtectedGuard';
 import { AppUser } from './types/rbac';
 import { ALL_MODULE_PERMISSIONS } from './services/rbacService';
-import { syncUsersWithFirestore } from './services/userService';
+import { syncUsersWithBackend } from './services/userService';
 
 declare const jspdf: any;
 
@@ -63,10 +63,10 @@ function App() {
         } catch (e) {}
     }, [isAuthenticated, currentUserInfo]);
 
-    // Sync users list (now via API polling or initial fetch in userService)
+    // Sync users list (now via API)
     useEffect(() => {
         let unsub: (() => void) | undefined;
-        syncUsersWithFirestore((latestUsers) => {
+        syncUsersWithBackend((latestUsers) => {
             setUsersList(latestUsers);
         }).then(cleanup => {
             unsub = cleanup;

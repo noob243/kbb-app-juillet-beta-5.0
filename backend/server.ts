@@ -1,7 +1,7 @@
 import express, { Request, Response, NextFunction } from 'express';
-import mongoose from 'mongoose';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import connectDB from './db';
 
 // Import Routes
 import clientRoutes from './routes/clients';
@@ -26,21 +26,15 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-// MongoDB Atlas Connection Logic
-const connectDB = async () => {
+// Middleware to ensure DB connection for every request in serverless
+app.use(async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const mongoUri = process.env.MONGODB_URI;
-    if (!mongoUri) {
-      throw new Error("MONGODB_URI is not defined in environment variables");
-    }
-
-    const conn = await mongoose.connect(mongoUri);
-    console.log(`🚀 MongoDB Atlas Connected: ${conn.connection.host}`);
+    await connectDB();
+    next();
   } catch (error) {
-    console.error('❌ MongoDB Connection Error:', error);
-    process.exit(1);
+    next(error);
   }
-};
+});
 
 // API Routes
 app.use('/api/clients', clientRoutes);
@@ -74,16 +68,11 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
-// Start Server ONLY if not in a serverless environment (like Vercel)
-if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
-  connectDB().then(() => {
-    app.listen(PORT, () => {
-      console.log(`⚙️  Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
-    });
+// Start Local Server ONLY if not in a serverless environment
+if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`⚙️  Local server running on port ${PORT}`);
   });
-} else {
-  // Ensure DB connection for serverless requests
-  connectDB();
 }
 
 export default app;
