@@ -74,9 +74,16 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   });
 });
 
-// Start Server after DB Connection
-connectDB().then(() => {
-  app.listen(PORT, () => {
-    console.log(`⚙️  Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+// Start Server ONLY if not in a serverless environment (like Vercel)
+if (process.env.NODE_ENV !== 'production' || !process.env.VERCEL) {
+  connectDB().then(() => {
+    app.listen(PORT, () => {
+      console.log(`⚙️  Server running in ${process.env.NODE_ENV} mode on port ${PORT}`);
+    });
   });
-});
+} else {
+  // Ensure DB connection for serverless requests
+  connectDB();
+}
+
+export default app;
