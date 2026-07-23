@@ -223,54 +223,8 @@ function App() {
                 let activeFournisseurs = fournisseurs;
 
                 if (alreadyCleared !== 'true') {
-                    console.log("Cabinet startup: Deleting default mock records from Firestore and local storage...");
+                    console.log("Cabinet startup: Clearing local storage and forcing cloud fetch...");
                     
-                    // Delete default mock records from Firestore
-                    const defaultClients = ['1', '2', '3', '4'];
-                    for (const id of defaultClients) {
-                        try { await dbDeleteDoc('clients', id); } catch (e) {}
-                    }
-
-                    const defaultCases = ['CI-2023-001', 'KDS-2023-012', 'BCC-2022-050', 'CI-2023-002'];
-                    for (const id of defaultCases) {
-                        try { await dbDeleteDoc('cases', id); } catch (e) {}
-                    }
-
-                    const defaultEvents = ['ATL-LC-01', 'ATL-RC-02', 'CONF-DA-01', 'COL-PI-01'];
-                    for (const id of defaultEvents) {
-                        try { await dbDeleteDoc('events', id); } catch (e) {}
-                    }
-
-                    const defaultTasks = [1, 2, 3];
-                    for (const id of defaultTasks) {
-                        try { await dbDeleteDoc('tasks', id); } catch (e) {}
-                    }
-
-                    const defaultInvoices = ['FACT-CI001-01', 'FACT-KDS012-01', 'FACT-CI002-01'];
-                    for (const id of defaultInvoices) {
-                        try { await dbDeleteDoc('invoices', id); } catch (e) {}
-                    }
-
-                    const defaultAvocats = ['JLT-01', 'MCM-02', 'PL-03'];
-                    for (const id of defaultAvocats) {
-                        try { await dbDeleteDoc('avocats', id); } catch (e) {}
-                    }
-
-                    const defaultPersonnels = ['PERS-01', 'PERS-02', 'PERS-03'];
-                    for (const id of defaultPersonnels) {
-                        try { await dbDeleteDoc('personnels', id); } catch (e) {}
-                    }
-
-                    const defaultFournisseurs = ['F-1', 'F-2', 'F-3'];
-                    for (const id of defaultFournisseurs) {
-                        try { await dbDeleteDoc('fournisseurs', id); } catch (e) {}
-                    }
-
-                    const defaultCorrespondances = ['corr_1', 'corr_2'];
-                    for (const id of defaultCorrespondances) {
-                        try { await dbDeleteDoc('correspondances', id); } catch (e) {}
-                    }
-
                     // Clear local storage backups
                     localStorage.removeItem('kbb_clients');
                     localStorage.removeItem('kbb_cases');
@@ -282,8 +236,7 @@ function App() {
                     localStorage.removeItem('kbb_fournisseurs');
 
                     localStorage.setItem('kbb_mock_data_cleared', 'true');
-                    console.log("Cabinet startup: Default mock records successfully cleared!");
-                    
+
                     // Reset local state variables to empty lists
                     activeClients = [];
                     activeCases = [];
