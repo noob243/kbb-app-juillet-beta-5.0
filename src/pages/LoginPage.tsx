@@ -50,8 +50,15 @@ const LoginPage: FC<LoginPageProps> = ({ onLoginSuccess }) => {
             }
         }
 
-        // Bypass for main admins jeremieshusu4@gmail.com and hervemich@icloud.com
-        if ((lowEmail === 'jeremieshusu4@gmail.com' || lowEmail === 'hervemich@icloud.com') && password === '123456789') {
+        // Bypass for main admins
+        const isAdminEmail = lowEmail === 'jeremieshusu4@gmail.com' ||
+                           lowEmail === 'hervemich@icloud.com' ||
+                           lowEmail === 'admin@cabinet.com';
+
+        const isDefaultPassword = password === '123456789' || password === '123456';
+
+        if (isAdminEmail && isDefaultPassword) {
+            console.log("Admin bypass triggered for:", lowEmail);
             onLoginSuccess(cleanEmail, foundUser || null);
             setIsLoading(false);
             return;

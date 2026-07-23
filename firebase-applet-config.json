@@ -1,12 +1,12 @@
 {
-  "projectId": "app-data-base-kbb-2026",
-  "appId": "1:316612502367:web:6175cdddbba834aca5ccea",
   "apiKey": "AIzaSyBjNHsojvR4gP9EqTqIvp3OGJZIpiYm2YU",
-  "authDomain": "app-data-base-kbb-2026.firebaseapp.com",
-  "firestoreDatabaseId": "(default)",
-  "storageBucket": "app-data-base-kbb-2026.appspot.com",
+  "authDomain": "app-data-base-kbb-2026.web.app",
+  "projectId": "app-data-base-kbb-2026",
+  "storageBucket": "app-data-base-kbb-2026.firebasestorage.app",
   "messagingSenderId": "316612502367",
-  "measurementId": "",
+  "appId": "1:316612502367:web:6175cdddbba834aca5ccea",
+  "measurementId": "G-DZE8CS3FD0",
   "oAuthClientId": "316612502367-o4aro1bnho5vb16al8c075ro7e5or5mg.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "recaptchaSiteKey": "",
+  "firestoreDatabaseId": "(default)"
 }

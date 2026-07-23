@@ -22,43 +22,18 @@ import CorrespondancePage from './pages/CorrespondancePage';
 import { Client, Case, Event, Task, Invoice, Avocat, Personnel, Fournisseur, AuditLog, Correspondance } from './types';
 import { playAlarmSound, stopAllAlarmSounds } from './utils/audio';
 
-// Firebase core configuration
-import { db, auth } from './firebase.ts';
-import { signInAnonymously, createUserWithEmailAndPassword, signOut, getAuth } from 'firebase/auth';
-import { initializeApp } from 'firebase/app';
-import firebaseConfig from '../firebase-applet-config.json';
+// API Service
+import { apiService } from './services/api';
 
-// Initialize a secondary Firebase app instance for secure admin registration without displacing the active session
-const secondaryApp = initializeApp(firebaseConfig, "SecondaryRegistrationApp");
-const secondaryAuth = getAuth(secondaryApp);
-import { collection, onSnapshot, doc, setDoc } from 'firebase/firestore';
-import { 
-    dbCreateDoc, 
-    dbUpdateDoc, 
-    dbDeleteDoc, 
-    dbCreateAuditLog,
-    syncLocalCollection,
-    forceSeedDatabase,
-    testFirestoreConnection
-} from './lib/firestoreService.ts';
-import {
-    initialClients,
-    initialCases,
-    initialEvents,
-    initialAvocats,
-    initialTasks,
-    initialInvoices,
-    initialPersonnels,
-    initialFournisseurs,
-    initialCorrespondances
-} from './data/mockData.ts';
-import { INITIAL_USERS } from './services/userService.ts';
+// Firebase core configuration (Keeping for Auth if needed)
+import { auth } from './firebase.ts';
+
 import { motion, AnimatePresence } from 'motion/react';
 import EmailComposerModal from './components/modals/EmailComposerModal';
 import { ProtectedGuard } from './components/auth/ProtectedGuard';
-import { syncUsersWithFirestore } from './services/userService';
-import { AppUser, ModuleKey } from './types/rbac';
+import { AppUser } from './types/rbac';
 import { ALL_MODULE_PERMISSIONS } from './services/rbacService';
+import { syncUsersWithFirestore } from './services/userService';
 
 declare const jspdf: any;
 
@@ -88,7 +63,7 @@ function App() {
         } catch (e) {}
     }, [isAuthenticated, currentUserInfo]);
 
-    // Real-time synchronization of users list and RBAC matrix
+    // Sync users list (now via API polling or initial fetch in userService)
     useEffect(() => {
         let unsub: (() => void) | undefined;
         syncUsersWithFirestore((latestUsers) => {
@@ -101,6 +76,7 @@ function App() {
         };
     }, []);
 
+    // Set currentUserObj based on usersList and currentUserInfo
     useEffect(() => {
         if (currentUserInfo?.email) {
             const cleanEmail = currentUserInfo.email.trim().toLowerCase();
@@ -129,6 +105,7 @@ function App() {
                     hasAppAccess: true,
                     permissions: ALL_MODULE_PERMISSIONS.map(m => m.key),
                     createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString(),
                     isDeleted: false,
                     status: 'Actif'
                 });
@@ -142,7 +119,7 @@ function App() {
     const [activeAlarmTask, setActiveAlarmTask] = useState<Task | null>(null);
     const stopActiveAlarmRef = React.useRef<(() => void) | null>(null);
     
-    // Core collection states initialized as empty (direct cloud orientation)
+    // Core collection states
     const [clients, setClients] = useState<Client[]>([]);
     const [cases, setCases] = useState<Case[]>([]);
     const [events, setEvents] = useState<Event[]>([]);
@@ -157,7 +134,6 @@ function App() {
 
     const [isDbConnected, setIsDbConnected] = useState(false);
     const [isSyncComplete, setIsSyncComplete] = useState(false);
-    const [isSyncing, setIsSyncing] = useState(false);
     const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -168,23 +144,6 @@ function App() {
             document.documentElement.classList.remove('dark');
         }
     }, [isDarkMode]);
-
-    useEffect(() => {
-        const colRef = collection(db, 'correspondances');
-        const unsub = onSnapshot(colRef, (snapshot) => {
-            const list: Correspondance[] = [];
-            snapshot.forEach((docSnap) => {
-                list.push(docSnap.data() as Correspondance);
-            });
-            if (list.length > 0) {
-                list.sort((a, b) => b.date.localeCompare(a.date));
-                setCorrespondances(list);
-            }
-        }, (err) => {
-            console.error("Correspondances subscription error:", err?.message);
-        });
-        return () => unsub();
-    }, [isDbConnected]);
 
     const [toasts, setToasts] = useState<{ id: string, type: 'success' | 'error', text: string }[]>([]);
     const [confirmModal, setConfirmModal] = useState<{
@@ -234,225 +193,51 @@ function App() {
         }, 5000);
     };
 
-    // 1. Establish Firebase Anonymous Authenticaton
-    useEffect(() => {
-        const initAuth = async () => {
-            console.log("Starting Firebase Anonymous Authentication...");
-            try {
-                const cred = await signInAnonymously(auth);
-                console.log("Firebase secure anonymous auth success! UID:", cred.user.uid);
-                setIsDbConnected(true);
+    // Data Fetching
+    const fetchAllData = async () => {
+        try {
+            const [
+                clientsData, casesData, eventsData, tasksData,
+                invoicesData, avocatsData, personnelsData,
+                fournisseursData, logsData, correspondancesData
+            ] = await Promise.all([
+                apiService.clients.getAll(),
+                apiService.cases.getAll(),
+                apiService.events.getAll(),
+                apiService.tasks.getAll(),
+                apiService.invoices.getAll(),
+                apiService.avocats.getAll(),
+                apiService.personnels.getAll(),
+                apiService.fournisseurs.getAll(),
+                apiService.auditLogs.getAll(),
+                apiService.correspondances.getAll(),
+            ]);
 
-                // Run a diagnostic write test
-                const testResult = await testFirestoreConnection();
-                if (testResult) {
-                    console.log("Diagnostic test passed. Proceeding with database seeding...");
-                    // Initialize/Seed database if completely empty
-                    await forceSeedDatabase({
-                        clients: initialClients,
-                        cases: initialCases,
-                        events: initialEvents,
-                        avocats: initialAvocats,
-                        tasks: initialTasks,
-                        invoices: initialInvoices,
-                        personnels: initialPersonnels,
-                        fournisseurs: initialFournisseurs,
-                        correspondances: initialCorrespondances,
-                        users: INITIAL_USERS
-                    });
-                    triggerToast('success', "Synchronisation réussie avec la base de données !");
-                } else {
-                    console.error("Diagnostic test failed. Database seeding skipped.");
-                    triggerToast('error', "Échec de connexion à la base de données.");
-                }
-            } catch (err: any) {
-                console.error("CRITICAL: Firebase Auth or Initialization failed:", err);
-                setIsDbConnected(true);
-                triggerToast('error', "Échec de connexion Cloud.");
-            }
-        };
-        initAuth();
+            setClients(clientsData);
+            setCases(casesData);
+            setEvents(eventsData);
+            setTasks(tasksData);
+            setInvoices(invoicesData);
+            setAvocats(avocatsData);
+            setPersonnels(personnelsData);
+            setFournisseurs(fournisseursData);
+            setLogs(logsData);
+            setCorrespondances(correspondancesData);
+
+            setIsDbConnected(true);
+            setIsSyncComplete(true);
+            console.log("🚀 Data loaded from MongoDB Atlas");
+        } catch (error) {
+            console.error("❌ Error fetching data:", error);
+            triggerToast('error', "Échec de connexion au serveur API.");
+        }
+    };
+
+    useEffect(() => {
+        fetchAllData();
     }, []);
 
-    // 2. Complete connection and enable real-time Firestore listeners for all collections
-    useEffect(() => {
-        if (!isDbConnected) return;
-
-        const unsubClients = onSnapshot(collection(db, 'clients'), (snap) => {
-            const list: Client[] = [];
-            snap.forEach(d => {
-                const data = d.data() as any;
-                list.push({
-                    id: data.id || d.id,
-                    name: data.name || data.nom || data.fullName || data.clientName || 'Client Sans Nom',
-                    contact: data.contact || data.phone || data.email || 'Contact non spécifié',
-                    cases: typeof data.cases === 'number' ? data.cases : 0,
-                    ...data
-                });
-            });
-            list.sort((a, b) => String(a.id).localeCompare(String(b.id)));
-            setClients(list);
-        }, (err) => {
-            console.error("Clients subscription error:", err?.message);
-        });
-
-        const unsubCases = onSnapshot(collection(db, 'cases'), (snap) => {
-            const list: Case[] = [];
-            snap.forEach(d => {
-                const data = d.data() as any;
-                list.push({
-                    id: data.id || d.id,
-                    name: data.name || data.nom || data.fullName || data.clientName || 'Dossier Sans Titre',
-                    client: data.client || data.clientName || 'Client inconnu',
-                    status: data.status || 'Nouveau',
-                    nextHearing: data.nextHearing || null,
-                    ...data
-                });
-            });
-            setCases(list);
-        }, (err) => {
-            console.error("Cases subscription error:", err?.message);
-        });
-
-        const unsubEvents = onSnapshot(collection(db, 'events'), (snap) => {
-            const list: Event[] = [];
-            snap.forEach(d => {
-                const data = d.data() as any;
-                list.push({
-                    id: data.id || d.id,
-                    name: data.name || data.title || 'Événement',
-                    type: data.type || 'Autre',
-                    date: data.date || '',
-                    lieu: data.lieu || '',
-                    ...data
-                });
-            });
-            setEvents(list);
-        }, (err) => {
-            console.error("Events subscription error:", err?.message);
-        });
-
-        const unsubTasks = onSnapshot(collection(db, 'tasks'), (snap) => {
-            const list: Task[] = [];
-            snap.forEach(d => {
-                const data = d.data() as any;
-                list.push({
-                    id: data.id || d.id,
-                    name: data.name || data.title || 'Tâche',
-                    caseId: data.caseId || '',
-                    lawyer: data.lawyer || '',
-                    dueDate: data.dueDate || '',
-                    status: data.status || 'Non effectué',
-                    ...data
-                });
-            });
-            list.sort((a, b) => String(a.id).localeCompare(String(b.id)));
-            setTasks(list);
-        }, (err) => {
-            console.error("Tasks subscription error:", err?.message);
-        });
-
-        const unsubInvoices = onSnapshot(collection(db, 'invoices'), (snap) => {
-            const list: Invoice[] = [];
-            snap.forEach(d => {
-                const data = d.data() as any;
-                list.push({
-                    id: data.id || d.id,
-                    caseId: data.caseId || '',
-                    dueDate: data.dueDate || '',
-                    totalAmount: data.totalAmount !== undefined ? Number(data.totalAmount) : 0,
-                    paidAmount: data.paidAmount !== undefined ? Number(data.paidAmount) : 0,
-                    status: data.status || 'Non réglée',
-                    ...data
-                });
-            });
-            setInvoices(list);
-        }, (err) => {
-            console.error("Invoices subscription error:", err?.message);
-        });
-
-        const unsubAvocats = onSnapshot(collection(db, 'avocats'), (snap) => {
-            const list: Avocat[] = [];
-            snap.forEach(d => {
-                const data = d.data() as any;
-                list.push({
-                    id: data.id || d.id,
-                    fullName: data.fullName || data.name || data.nom || 'Avocat',
-                    firstOathDate: data.firstOathDate || '',
-                    onaNumber: data.onaNumber || '',
-                    cabinetStatus: data.cabinetStatus || 'Junior',
-                    serviceStatus: data.serviceStatus || 'Actif',
-                    phone: data.phone || '',
-                    ...data
-                });
-            });
-            setAvocats(list);
-        }, (err) => {
-            console.error("Avocats subscription error:", err?.message);
-        });
-
-        const unsubPersonnels = onSnapshot(collection(db, 'personnels'), (snap) => {
-            const list: Personnel[] = [];
-            snap.forEach(d => list.push(d.data() as Personnel));
-            setPersonnels(list);
-        }, (err) => {
-            console.error("Personnels subscription error:", err?.message);
-        });
-
-        const unsubFournisseurs = onSnapshot(collection(db, 'fournisseurs'), (snap) => {
-            const list: Fournisseur[] = [];
-            snap.forEach(d => list.push(d.data() as Fournisseur));
-            setFournisseurs(list);
-        }, (err) => {
-            console.error("Fournisseurs subscription error:", err?.message);
-        });
-
-        const unsubLogs = onSnapshot(collection(db, 'auditLogs'), (snap) => {
-            const list: AuditLog[] = [];
-            snap.forEach(d => list.push(d.data() as AuditLog));
-            list.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
-            setLogs(list);
-        }, (err) => {
-            console.error("AuditLogs subscription error:", err?.message);
-        });
-
-        const unsubCorrespondances = onSnapshot(collection(db, 'correspondances'), (snap) => {
-            const list: Correspondance[] = [];
-            snap.forEach(d => list.push(d.data() as Correspondance));
-            list.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-            setCorrespondances(list);
-        }, (err) => {
-            console.error("Correspondances subscription error:", err?.message);
-        });
-
-        const unsubPresences = onSnapshot(collection(db, 'presences'), (snap) => {
-            const map: { [email: string]: any } = {};
-            snap.forEach((docSnap) => {
-                map[docSnap.id] = docSnap.data();
-            });
-            setPresences(map);
-        }, (err) => {
-            console.error("Presences subscription error:", err?.message);
-        });
-
-        setIsSyncComplete(true);
-
-        return () => {
-            unsubClients();
-            unsubCases();
-            unsubEvents();
-            unsubTasks();
-            unsubInvoices();
-            unsubAvocats();
-            unsubPersonnels();
-            unsubFournisseurs();
-            unsubLogs();
-            unsubCorrespondances();
-            unsubPresences();
-        };
-    }, [isDbConnected]);
-
-    // Task reminder observer and notification checker loops
+    // Task reminder observer
     useEffect(() => {
         if (typeof window !== 'undefined' && 'Notification' in window) {
             if (Notification.permission === 'default') {
@@ -461,169 +246,357 @@ function App() {
         }
 
         const interval = setInterval(() => {
-            if (activeAlarmTask) return; // Wait until current alarm is resolved to avoid spamming
+            if (activeAlarmTask) return;
 
             const now = new Date();
-            const currentLocalDateString = now.toISOString().split('T')[0]; // YYYY-MM-DD
-            const currentLocalTimeString = now.toTimeString().slice(0, 5);  // HH:MM
+            const currentLocalDateString = now.toISOString().split('T')[0];
+            const currentLocalTimeString = now.toTimeString().slice(0, 5);
 
             const pendingReminder = tasks.find(t => {
-                if (!t.reminderEnabled || t.reminderTriggered || t.status === 'Effectué') {
-                    return false;
-                }
-                
+                if (!t.reminderEnabled || t.reminderTriggered || t.status === 'Effectué') return false;
                 const scheduledDate = t.reminderDate || '';
                 const scheduledTime = t.reminderTime || '';
-
                 if (!scheduledDate || !scheduledTime) return false;
-
-                if (scheduledDate < currentLocalDateString) {
-                    return true; // Missed from before
-                } else if (scheduledDate === currentLocalDateString) {
-                    return scheduledTime <= currentLocalTimeString; // Today, at or after the scheduled time
-                }
-
+                if (scheduledDate < currentLocalDateString) return true;
+                else if (scheduledDate === currentLocalDateString) return scheduledTime <= currentLocalTimeString;
                 return false;
             });
 
             if (pendingReminder) {
                 setActiveAlarmTask(pendingReminder);
-                
                 const soundType = pendingReminder.reminderSound || 'digital';
-                const stopSoundFn = playAlarmSound(soundType, 0.7);
-                stopActiveAlarmRef.current = stopSoundFn;
-
+                stopActiveAlarmRef.current = playAlarmSound(soundType, 0.7);
                 if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-                    try {
-                        const notif = new Notification(`Rappel de Tâche: ${pendingReminder.name}`, {
-                            body: `Échéance / Rendez-vous à ${scheduledTime || 'l\'instant'}\nResponsable: ${pendingReminder.lawyer}`,
-                            icon: '/favicon.ico',
-                            requireInteraction: true
-                        });
-                        
-                        notif.onclick = () => {
-                            window.focus();
-                            notif.close();
-                        };
-                    } catch (err) {
-                        console.warn("Failed standard notifications call:", err);
-                    }
+                    new Notification(`Rappel: ${pendingReminder.name}`, {
+                        body: `Échéance à ${pendingReminder.reminderTime}\nResponsable: ${pendingReminder.lawyer}`,
+                        icon: '/favicon.ico',
+                        requireInteraction: true
+                    });
                 }
             }
-        }, 4000); // Check every 4 seconds
+        }, 10000);
 
         return () => clearInterval(interval);
     }, [tasks, activeAlarmTask]);
 
     const handleDismissAlarm = async () => {
         if (!activeAlarmTask) return;
-        if (stopActiveAlarmRef.current) {
-            stopActiveAlarmRef.current();
-        }
+        if (stopActiveAlarmRef.current) stopActiveAlarmRef.current();
         stopAllAlarmSounds();
 
-        const updated = {
-            ...activeAlarmTask,
-            reminderTriggered: true
-        };
-
-        setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
         try {
-            const { id, ...cleanTask } = updated;
-            await dbUpdateDoc('tasks', id, cleanTask);
-        } catch (err) {
-            console.error("Failed to dismiss alarm in DB:", err);
-        }
-        setActiveAlarmTask(null);
-        triggerToast('success', "Rappel acquitté avec succès.");
+            const updated = { ...activeAlarmTask, reminderTriggered: true };
+            await apiService.tasks.update(updated.id, updated);
+            setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
+            setActiveAlarmTask(null);
+            triggerToast('success', "Rappel acquitté.");
+        } catch (err) { console.error(err); }
     };
 
     const handleSnoozeAlarm = async () => {
         if (!activeAlarmTask) return;
-        if (stopActiveAlarmRef.current) {
-            stopActiveAlarmRef.current();
-        }
+        if (stopActiveAlarmRef.current) stopActiveAlarmRef.current();
         stopAllAlarmSounds();
 
-        // Snooze for 5 minutes
         const now = new Date();
         now.setMinutes(now.getMinutes() + 5);
         const snoozedDate = now.toISOString().split('T')[0];
         const snoozedTime = now.toTimeString().slice(0, 5);
 
-        const updated = {
-            ...activeAlarmTask,
-            reminderDate: snoozedDate,
-            reminderTime: snoozedTime,
-            reminderTriggered: false
+        try {
+            const updated = { ...activeAlarmTask, reminderDate: snoozedDate, reminderTime: snoozedTime, reminderTriggered: false };
+            await apiService.tasks.update(updated.id, updated);
+            setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
+            setActiveAlarmTask(null);
+            triggerToast('success', `Régler pour ${snoozedTime}`);
+        } catch (err) { console.error(err); }
+    };
+
+    const logActivity = async (actionType: any, module: string, description: string, details?: any) => {
+        const log = {
+            id: `log_${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            userEmail: currentUserInfo?.email || 'anonyme@kbb.cd',
+            userName: currentUserInfo?.name || 'Utilisateur Anonyme',
+            actionType,
+            module,
+            description,
+            details
         };
-
-        setTasks(prev => prev.map(t => t.id === updated.id ? updated : t));
         try {
-            const { id, ...cleanTask } = updated;
-            await dbUpdateDoc('tasks', id, cleanTask);
-        } catch (err) {
-            console.error("Failed to snooze alarm in DB:", err);
-        }
-        setActiveAlarmTask(null);
-        triggerToast('success', `Régler à nouveau pour dans 5 min (${snoozedTime})`);
+            await apiService.auditLogs.create(log);
+            setLogs(prev => [log as AuditLog, ...prev]);
+        } catch (e) { console.error(e); }
     };
 
-    const handleUpdateTask = async (updatedTask: Task) => {
-        setTasks(prev => prev.map(t => t.id === updatedTask.id ? updatedTask : t));
+    // --- CRUD Handlers ---
+
+    const handleAddClient = async (newClient: any) => {
         try {
-            const { id, ...cleanTask } = updatedTask;
-            await dbUpdateDoc('tasks', id, cleanTask);
-            triggerToast('success', `Tâche "${updatedTask.name}" mise à jour !`);
-        } catch (err) {
-            triggerToast('error', "Échec de modification de la tâche.");
-        }
+            const saved = await apiService.clients.create(newClient);
+            setClients(prev => [...prev, saved]);
+            triggerToast('success', `Client "${saved.name}" ajouté.`);
+            logActivity('Ajout', 'Clients', `Création du client "${saved.name}"`);
+        } catch (err) { triggerToast('error', "Erreur."); }
     };
 
+    const handleUpdateClient = async (updated: Client) => {
+        try {
+            const saved = await apiService.clients.update(updated.id, updated);
+            setClients(prev => prev.map(c => c.id === updated.id ? saved : c));
+            triggerToast('success', "Client mis à jour.");
+        } catch (err) { triggerToast('error', "Erreur."); }
+    };
 
-
-    // Manage user presence status in Firestore
-    useEffect(() => {
-        if (!isAuthenticated || !currentUserInfo || !isDbConnected) return;
-
-        const email = currentUserInfo.email.trim().toLowerCase();
-        const docRef = doc(db, 'presences', email);
-
-        const setOnline = async () => {
-            try {
-                await setDoc(docRef, {
-                    email,
-                    name: currentUserInfo.name,
-                    role: currentUserInfo.role,
-                    status: 'online',
-                    lastActive: new Date().toISOString()
-                });
-            } catch (err) {
-                console.error("Error setting presence to online:", err);
+    const handleDeleteClient = (id: number | string) => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'Supprimer ce client ?',
+            message: 'Action irréversible.',
+            onConfirm: async () => {
+                try {
+                    await apiService.clients.delete(id);
+                    setClients(prev => prev.filter(c => c.id !== id));
+                    triggerToast('success', "Supprimé.");
+                } catch (err) { triggerToast('error', "Erreur."); }
             }
-        };
+        });
+    };
 
-        setOnline();
+    const handleAddCase = async (newCase: any) => {
+        try {
+            const saved = await apiService.cases.create(newCase);
+            setCases(prev => [...prev, saved]);
+            triggerToast('success', `Dossier "${saved.name}" créé.`);
+            logActivity('Ajout', 'Dossiers', `Création du dossier "${saved.name}"`);
+        } catch (err) { triggerToast('error', "Erreur."); }
+    };
 
-        return () => {
-            setDoc(docRef, {
-                email,
-                name: currentUserInfo.name,
-                role: currentUserInfo.role,
-                status: 'offline',
-                lastActive: new Date().toISOString()
-            }).catch(err => console.error("Error setting presence to offline on unmount:", err));
-        };
-    }, [isAuthenticated, currentUserInfo, isDbConnected]);
+    const handleUpdateCase = async (updated: Case) => {
+        try {
+            const saved = await apiService.cases.update(updated.id, updated);
+            setCases(prev => prev.map(c => c.id === updated.id ? saved : c));
+            triggerToast('success', "Dossier mis à jour.");
+        } catch (err) { triggerToast('error', "Erreur."); }
+    };
 
-    const lawyerNames = avocats.map((a) => a.fullName);
+    const handleDeleteCase = (id: string) => {
+        setConfirmModal({
+            isOpen: true,
+            title: 'Supprimer ce dossier ?',
+            message: 'Êtes-vous sûr ?',
+            onConfirm: async () => {
+                try {
+                    await apiService.cases.delete(id);
+                    setCases(prev => prev.filter(c => c.id !== id));
+                    triggerToast('success', "Supprimé.");
+                } catch (err) { triggerToast('error', "Erreur."); }
+            }
+        });
+    };
+
+    const handleAddEvent = async (event: any) => {
+        try {
+            const saved = await apiService.events.create(event);
+            setEvents(prev => [...prev, saved]);
+            triggerToast('success', "Événement ajouté.");
+        } catch (err) { triggerToast('error', "Erreur."); }
+    };
+
+    const handleUpdateEvent = async (updated: Event) => {
+        try {
+            const saved = await apiService.events.update(updated.id, updated);
+            setEvents(prev => prev.map(e => e.id === updated.id ? saved : e));
+            triggerToast('success', "Mis à jour.");
+        } catch (err) { triggerToast('error', "Erreur."); }
+    };
+
+    const handleDeleteEvent = (id: string) => {
+        setConfirmModal({
+            isOpen: true,
+            title: "Supprimer l'événement ?",
+            onConfirm: async () => {
+                try {
+                    await apiService.events.delete(id);
+                    setEvents(prev => prev.filter(e => e.id !== id));
+                    triggerToast('success', "Supprimé.");
+                } catch (err) { triggerToast('error', "Erreur."); }
+            },
+            message: 'Action irréversible.'
+        });
+    };
+
+    const handleAddTask = async (task: any) => {
+        try {
+            const saved = await apiService.tasks.create(task);
+            setTasks(prev => [...prev, saved]);
+            triggerToast('success', "Tâche ajoutée.");
+        } catch (err) { triggerToast('error', "Erreur."); }
+    };
+
+    const handleUpdateTask = async (updated: Task) => {
+        try {
+            const saved = await apiService.tasks.update(updated.id, updated);
+            setTasks(prev => prev.map(t => t.id === updated.id ? saved : t));
+            triggerToast('success', "Tâche mise à jour.");
+        } catch (err) { triggerToast('error', "Erreur."); }
+    };
+
+    const handleUpdateTaskStatus = async (id: number, status: any) => {
+        const task = tasks.find(t => t.id === id);
+        if (!task) return;
+        try {
+            const updated = { ...task, status };
+            await apiService.tasks.update(id, updated);
+            setTasks(prev => prev.map(t => t.id === id ? updated : t));
+        } catch (err) { triggerToast('error', "Erreur."); }
+    };
+
+    const handleDeleteTask = (id: number) => {
+        setConfirmModal({
+            isOpen: true,
+            title: "Supprimer la tâche ?",
+            message: "Êtes-vous sûr ?",
+            onConfirm: async () => {
+                try {
+                    await apiService.tasks.delete(id);
+                    setTasks(prev => prev.filter(t => t.id !== id));
+                    triggerToast('success', "Supprimée.");
+                } catch (err) { triggerToast('error', "Erreur."); }
+            }
+        });
+    };
+
+    const handleAddInvoice = async (invoice: any) => {
+        try {
+            const saved = await apiService.invoices.create(invoice);
+            setInvoices(prev => [...prev, saved]);
+            triggerToast('success', "Facture émise.");
+        } catch (err) { triggerToast('error', "Erreur."); }
+    };
+
+    const handleUpdateInvoice = async (updated: Invoice) => {
+        try {
+            const saved = await apiService.invoices.update(updated.id, updated);
+            setInvoices(prev => prev.map(i => i.id === updated.id ? saved : i));
+            triggerToast('success', "Facture mise à jour.");
+        } catch (err) { triggerToast('error', "Erreur."); }
+    };
+
+    const handleDeleteInvoice = (id: string) => {
+        setConfirmModal({
+            isOpen: true,
+            title: "Supprimer la facture ?",
+            message: "Action définitive.",
+            onConfirm: async () => {
+                try {
+                    await apiService.invoices.delete(id);
+                    setInvoices(prev => prev.filter(i => i.id !== id));
+                    triggerToast('success', "Supprimée.");
+                } catch (err) { triggerToast('error', "Erreur."); }
+            }
+        });
+    };
+
+    const handleAddAvocat = async (avocat: any) => {
+        try {
+            const saved = await apiService.avocats.create(avocat);
+            setAvocats(prev => [...prev, saved]);
+            triggerToast('success', "Avocat ajouté.");
+        } catch (err) { triggerToast('error', "Erreur."); }
+    };
+
+    const handleUpdateAvocat = async (updated: Avocat) => {
+        try {
+            const saved = await apiService.avocats.update(updated.id, updated);
+            setAvocats(prev => prev.map(a => a.id === updated.id ? saved : a));
+            triggerToast('success', "Profil mis à jour.");
+        } catch (err) { triggerToast('error', "Erreur."); }
+    };
+
+    const handleDeleteAvocat = (id: string) => {
+        setConfirmModal({
+            isOpen: true,
+            title: "Retirer l'avocat ?",
+            message: "Action définitive.",
+            onConfirm: async () => {
+                try {
+                    await apiService.avocats.delete(id);
+                    setAvocats(prev => prev.filter(a => a.id !== id));
+                    triggerToast('success', "Retiré.");
+                } catch (err) { triggerToast('error', "Erreur."); }
+            }
+        });
+    };
+
+    const handleAddPersonnel = async (p: any) => {
+        try {
+            const saved = await apiService.personnels.create(p);
+            setPersonnels(prev => [...prev, saved]);
+            triggerToast('success', "Personnel ajouté.");
+        } catch (err) { triggerToast('error', "Erreur."); }
+    };
+
+    const handleUpdatePersonnel = async (updated: Personnel) => {
+        try {
+            const saved = await apiService.personnels.update(updated.id, updated);
+            setPersonnels(prev => prev.map(p => p.id === updated.id ? saved : p));
+            triggerToast('success', "Personnel mis à jour.");
+        } catch (err) { triggerToast('error', "Erreur."); }
+    };
+
+    const handleDeletePersonnel = (id: string) => {
+        setConfirmModal({
+            isOpen: true,
+            title: "Retirer le membre ?",
+            message: "Action définitive.",
+            onConfirm: async () => {
+                try {
+                    await apiService.personnels.delete(id);
+                    setPersonnels(prev => prev.filter(p => p.id !== id));
+                    triggerToast('success', "Retiré.");
+                } catch (err) { triggerToast('error', "Erreur."); }
+            }
+        });
+    };
+
+    const handleAddFournisseur = async (f: any) => {
+        try {
+            const saved = await apiService.fournisseurs.create(f);
+            setFournisseurs(prev => [...prev, saved]);
+            triggerToast('success', "Fournisseur ajouté.");
+        } catch (err) { triggerToast('error', "Erreur."); }
+    };
+
+    const handleUpdateFournisseur = async (updated: Fournisseur) => {
+        try {
+            const saved = await apiService.fournisseurs.update(updated.id, updated);
+            setFournisseurs(prev => prev.map(f => f.id === updated.id ? saved : f));
+            triggerToast('success', "Fournisseur mis à jour.");
+        } catch (err) { triggerToast('error', "Erreur."); }
+    };
+
+    const handleDeleteFournisseur = (id: string) => {
+        setConfirmModal({
+            isOpen: true,
+            title: "Supprimer le fournisseur ?",
+            message: "Action définitive.",
+            onConfirm: async () => {
+                try {
+                    await apiService.fournisseurs.delete(id);
+                    setFournisseurs(prev => prev.filter(f => f.id !== id));
+                    triggerToast('success', "Supprimé.");
+                } catch (err) { triggerToast('error', "Erreur."); }
+            }
+        });
+    };
 
     const handleLoginSuccess = (email: string) => {
         setIsAuthenticated(true);
         const cleanEmail = email.trim().toLowerCase();
-        
+
         // Search in avocats
-        const foundAvocat = avocats.find(a => 
+        const foundAvocat = avocats.find(a =>
             a.emails && a.emails.some(e => e.trim().toLowerCase() === cleanEmail)
         );
         if (foundAvocat) {
@@ -634,18 +607,11 @@ function App() {
             };
             setCurrentUserInfo(userInfo);
             triggerToast('success', `Ravi de vous revoir, Maître ${foundAvocat.fullName} !`);
-            dbCreateAuditLog({
-                userEmail: userInfo.email,
-                userName: userInfo.name,
-                actionType: 'Connexion',
-                module: 'Authentification',
-                description: `Connexion de Maître ${userInfo.name} (${userInfo.role})`
-            });
             return;
         }
 
         // Search in personnels
-        const foundPersonnel = personnels.find(p => 
+        const foundPersonnel = personnels.find(p =>
             p.email && p.email.trim().toLowerCase() === cleanEmail
         );
         if (foundPersonnel) {
@@ -656,912 +622,108 @@ function App() {
             };
             setCurrentUserInfo(userInfo);
             triggerToast('success', `Ravi de vous revoir, ${foundPersonnel.fullName} !`);
-            dbCreateAuditLog({
-                userEmail: userInfo.email,
-                userName: userInfo.name,
-                actionType: 'Connexion',
-                module: 'Authentification',
-                description: `Connexion de ${userInfo.name} (${userInfo.role})`
-            });
             return;
         }
 
         // Default admin account
-        const adminName = cleanEmail === 'jeremieshusu4@gmail.com' 
-            ? "Jérémie Shusu" 
-            : cleanEmail === 'hervemich@icloud.com' 
-                ? "Herve Mich" 
-                : "Administrateur Cabinet";
+        const adminName = cleanEmail === 'jeremieshusu4@gmail.com' ? "Jérémie Shusu" : "Administrateur Cabinet";
         const adminInfo = {
             name: adminName,
             role: "Directeur Associé KBB",
             email: cleanEmail
         };
         setCurrentUserInfo(adminInfo);
-        triggerToast('success', `Connexion de l'administrateur ${adminName} réussie !`);
-        dbCreateAuditLog({
-            userEmail: adminInfo.email,
-            userName: adminInfo.name,
-            actionType: 'Connexion',
-            module: 'Authentification',
-            description: `Connexion de l'administrateur du cabinet (${adminInfo.name})`
-        });
+        triggerToast('success', `Connexion réussie !`);
     };
 
     const handleLogout = () => {
-        if (currentUserInfo) {
-            dbCreateAuditLog({
-                userEmail: currentUserInfo.email,
-                userName: currentUserInfo.name,
-                actionType: 'Autre',
-                module: 'Authentification',
-                description: `Déconnexion de ${currentUserInfo.name}`
-            });
-            // Mark user status as offline in Firestore
-            const email = currentUserInfo.email.trim().toLowerCase();
-            setDoc(doc(db, 'presences', email), {
-                email,
-                name: currentUserInfo.name,
-                role: currentUserInfo.role,
-                status: 'offline',
-                lastActive: new Date().toISOString()
-            }).catch(err => console.error("Error setting offline presence on logout:", err));
-        }
         setIsAuthenticated(false);
         setCurrentUserInfo(null);
         setCurrentPage('Dashboard');
     };
 
-    const logActivity = async (
-        actionType: 'Ajout' | 'Modification' | 'Suppression' | 'Connexion' | 'Autre',
-        module: string,
-        description: string,
-        details?: any
-    ) => {
-        const userEmail = currentUserInfo?.email || auth.currentUser?.email || 'anonyme@kbb.cd';
-        const userName = currentUserInfo?.name || 'Utilisateur Anonyme';
-        try {
-            await dbCreateAuditLog({
-                userEmail,
-                userName,
-                actionType,
-                module,
-                description,
-                details: details ? JSON.parse(JSON.stringify(details)) : null
-            });
-        } catch (e) {
-            console.error("Failed to log activity:", e);
-        }
-    };
-    
-    // --- PDF Export Logic ---
-    const handleExportPDF = (title: string, headers: string[], data: any[][]) => {
-        const { jsPDF } = jspdf;
-        const doc = new jsPDF();
-
-        doc.setFontSize(18);
-        doc.text(`${title} - KBB App`, 14, 22);
-        doc.setFontSize(11);
-        doc.setTextColor(100);
-        doc.text(`Généré le: ${new Date().toLocaleDateString('fr-FR')}`, 14, 30);
-
-        (doc as any).autoTable({
-            head: [headers],
-            body: data,
-            startY: 35,
-            theme: 'striped',
-            headStyles: { fillColor: [21, 68, 124] },
-        });
-
-        const safeTitle = title.toLowerCase().replace(/\s+/g, '-');
-        doc.save(`liste-${safeTitle}-kbb-app.pdf`);
-    };
-
-    const handleExportClients = () => {
-        const headers = ["Nom du Client", "Contact Principal", "Dossiers Actifs"];
-        const data = clients.map((c) => [c.name, c.contact, c.cases]);
-        handleExportPDF("Clients", headers, data);
-    };
-
-    const handleExportCases = () => {
-        const headers = ["Référence", "Nom du Dossier", "Client", "Statut"];
-        const data = cases.map((c) => [c.id, c.name, c.client, c.status]);
-        handleExportPDF("Dossiers", headers, data);
-    };
-
-    const handleExportBackup = () => {
-        try {
-            const backupData = {
-                backupDate: new Date().toISOString(),
-                clients,
-                cases,
-                events,
-                tasks,
-                invoices,
-                avocats,
-                personnels,
-                fournisseurs,
-                logs
-            };
-            
-            const jsonString = JSON.stringify(backupData, null, 2);
-            const blob = new Blob([jsonString], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `kbb_backup_${new Date().toISOString().split('T')[0]}.json`;
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
-            URL.revokeObjectURL(url);
-            
-            logActivity('Autre', 'Gestion', 'Exportation complète de la base de données (Sauvegarde JSON)');
-            triggerToast('success', "Sauvegarde de la base de données exportée avec succès !");
-        } catch (error) {
-            console.error("Backup export error:", error);
-            triggerToast('error', "Échec de l'exportation de la sauvegarde.");
-        }
-    };
-
-    // --- Secured Firestore + Live Toast CRUD Handlers ---
-    const handleAddClient = async (newClient: Omit<Client, 'id'> & { id?: string | number }) => {
-        const nextId = newClient.id || (clients.length > 0 ? Math.max(...clients.map(c => typeof c.id === 'number' ? c.id : 0)) : 0) + 1;
-        const { id, ...cleanClient } = newClient;
-        try {
-            await dbCreateDoc('clients', nextId, cleanClient);
-            const record = { ...cleanClient, id: nextId } as Client;
-            setClients(prev => [...prev, record]);
-            triggerToast('success', `Client "${newClient.name}" créé avec succès !`);
-            logActivity('Ajout', 'Clients', `Création du client "${newClient.name}" (ID: ${nextId})`, cleanClient);
-        } catch (err) {
-            triggerToast('error', `Échec de l'enregistrement du client "${newClient.name}".`);
-        }
-    };
-
-    const handleAddCase = async (newCase: Case, tasksToAdd?: Omit<Task, 'id'>[]) => {
-        try {
-            const { id, ...cleanCase } = newCase;
-            await dbCreateDoc('cases', id, cleanCase);
-            setCases(prev => [...prev, newCase]);
-            logActivity('Ajout', 'Dossiers', `Création du dossier "${newCase.name}" pour le client "${newCase.client}" (Réf: ${id})`, cleanCase);
-            
-            if (tasksToAdd && tasksToAdd.length > 0) {
-                let currentMaxId = tasks.length > 0 ? Math.max(...tasks.map(t => t.id)) : 0;
-                for (const t of tasksToAdd) {
-                    currentMaxId++;
-                    const taskProps = { ...t, id: currentMaxId };
-                    const { id: _, ...cleanTask } = taskProps;
-                    await dbCreateDoc('tasks', currentMaxId, cleanTask);
-                    setTasks(prev => [...prev, taskProps]);
-                    logActivity('Ajout', 'Tâches', `Création automatique de la tâche "${t.name}" pour le dossier "${newCase.name}"`, cleanTask);
-                }
-            }
-            triggerToast('success', `Dossier "${newCase.name}" et tâches complémentaires enregistrés !`);
-        } catch (err) {
-            triggerToast('error', `Échec de l'écriture du dossier "${newCase.name}".`);
-        }
-    };
-
-    const handleAddEvent = async (newEvent: Event) => {
-        try {
-            const { id, ...cleanEvent } = newEvent;
-            await dbCreateDoc('events', id, cleanEvent);
-            setEvents(prev => [...prev, newEvent]);
-            triggerToast('success', `Événement "${newEvent.name}" planifié avec succès !`);
-            logActivity('Ajout', 'Agenda', `Planification de l'événement "${newEvent.name}" à "${newEvent.lieu}"`, cleanEvent);
-        } catch (err) {
-            triggerToast('error', "Échec de l'enregistrement de l'événement.");
-        }
-    };
-
-    const handleUpdateEvent = async (updatedEvent: Event) => {
-        setEvents(prev => prev.map(e => e.id === updatedEvent.id ? updatedEvent : e));
-        try {
-            const { id, ...cleanEvent } = updatedEvent;
-            await dbUpdateDoc('events', id, cleanEvent);
-            triggerToast('success', `Événement "${updatedEvent.name}" mis à jour !`);
-            logActivity('Modification', 'Agenda', `Mise à jour de l'événement "${updatedEvent.name}"`, cleanEvent);
-        } catch (err) {
-            triggerToast('error', "Échec de la mise à jour de l'événement.");
-        }
-    };
-
-    const handleAddTask = async (newTask: Omit<Task, 'id'>) => {
-        const nextId = (tasks.length > 0 ? Math.max(...tasks.map(t => t.id)) : 0) + 1;
-        const record = { ...newTask, id: nextId } as Task;
-        try {
-            await dbCreateDoc('tasks', nextId, newTask);
-            setTasks(prev => [...prev, record]);
-            triggerToast('success', `Tâche "${newTask.name}" programmée avec succès.`);
-            logActivity('Ajout', 'Tâches', `Programmation de la tâche "${newTask.name}" pour ${newTask.lawyer}`, newTask);
-        } catch (err) {
-            triggerToast('error', "Impossible d'enregistrer la tâche.");
-        }
-    };
-
-    const handleUpdateTaskStatus = async (id: number, status: 'Effectué' | 'Non effectué' | 'Effectué à moitié') => {
-        const task = tasks.find(t => t.id === id);
-        setTasks(prev => prev.map(t => t.id === id ? { ...t, status } : t));
-        try {
-            await dbUpdateDoc('tasks', id, { status });
-            triggerToast('success', `Statut de la tâche mis à jour !`);
-            logActivity('Modification', 'Tâches', `Mise à jour du statut de la tâche "${task?.name || id}" à "${status}"`);
-        } catch (err) {
-            triggerToast('error', "Échec de modification de la tâche.");
-        }
-    };
-
-    const handleAddInvoice = async (newInvoice: Invoice) => {
-        try {
-            const { id, ...cleanInvoice } = newInvoice;
-            await dbCreateDoc('invoices', id, cleanInvoice);
-            setInvoices(prev => [...prev, newInvoice]);
-            triggerToast('success', `Facture "${newInvoice.id}" émise avec succès !`);
-            logActivity('Ajout', 'Facturation', `Émission de la facture "${newInvoice.id}" de ${newInvoice.totalAmount}€ pour le dossier "${newInvoice.caseId}"`, cleanInvoice);
-        } catch (err) {
-            triggerToast('error', "Échec de l'émission de la facture.");
-        }
-    };
-
-    const handleAddAvocat = async (newAvocat: Avocat, password?: string) => {
-        if (!newAvocat.emails || !newAvocat.emails[0] || !password) {
-            triggerToast('error', "L'adresse e-mail principale et le mot de passe sont requis pour enregistrer un avocat.");
-            return;
-        }
-
-        try {
-            const email = newAvocat.emails[0];
-            const userCredential = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-            console.log("Successfully created user auth account for Lawyer:", userCredential.user.uid);
-            await signOut(secondaryAuth);
-        } catch (authError: any) {
-            if (authError?.code === 'auth/email-already-in-use' || authError?.message?.includes('email-already-in-use')) {
-                console.log("Firebase Auth account already exists for lawyer:", newAvocat.emails[0]);
-            } else {
-                console.error("Auth registration error:", authError);
-                triggerToast('error', `Échec d'authentification: ${authError.message || authError}`);
-                return;
-            }
-        }
-
-        try {
-            const { id, ...cleanAvocat } = newAvocat;
-            const payload = { ...cleanAvocat, photo: null };
-            await dbCreateDoc('avocats', id, payload);
-            setAvocats(prev => [...prev, newAvocat]);
-            triggerToast('success', `Profil de l'avocat ${newAvocat.fullName} créé !`);
-            logActivity('Ajout', 'Collaborateurs', `Création du profil de l'avocat ${newAvocat.fullName} (${newAvocat.cabinetStatus})`, payload);
-        } catch (err) {
-            triggerToast('error', "Erreur d'enregistrement de l'avocat.");
-        }
-    };
-
-    const handleAddPersonnel = async (newPersonnel: Personnel, password?: string) => {
-        const rolesWithAuth = ['Secrétaire', 'Stagiaire', 'Assistant juridique', 'Assistant de direction'];
-        const requiresAuth = rolesWithAuth.includes(newPersonnel.role);
-
-        if (requiresAuth) {
-            if (!newPersonnel.email || !password) {
-                triggerToast('error', `L'adresse e-mail et le mot de passe sont requis pour le rôle de ${newPersonnel.role}.`);
-                return;
-            }
-
-            try {
-                const userCredential = await createUserWithEmailAndPassword(secondaryAuth, newPersonnel.email, password);
-                console.log("Successfully created user auth account for Personnel:", userCredential.user.uid);
-                await signOut(secondaryAuth);
-            } catch (authError: any) {
-                if (authError?.code === 'auth/email-already-in-use' || authError?.message?.includes('email-already-in-use')) {
-                    console.log("Firebase Auth account already exists for personnel:", newPersonnel.email);
-                } else {
-                    console.error("Auth registration error for personnel:", authError);
-                    triggerToast('error', `Échec d'authentification: ${authError.message || authError}`);
-                    return;
-                }
-            }
-        }
-
-        try {
-            const { id, ...cleanPersonnel } = newPersonnel;
-            await dbCreateDoc('personnels', id, cleanPersonnel);
-            setPersonnels(prev => [...prev, newPersonnel]);
-            triggerToast('success', `Agent administratif "${newPersonnel.fullName}" enregistré !`);
-            logActivity('Ajout', 'Personnel', `Création de la fiche de l'agent administratif "${newPersonnel.fullName}" (${newPersonnel.role})`, cleanPersonnel);
-        } catch (err) {
-            triggerToast('error', "Erreur lors de l'inscription du membre du personnel.");
-        }
-    };
-
-    const handleAddFournisseur = async (newFournisseur: Fournisseur) => {
-        try {
-            const { id, ...cleanFournisseur } = newFournisseur;
-            await dbCreateDoc('fournisseurs', id, cleanFournisseur);
-            setFournisseurs(prev => [...prev, newFournisseur]);
-            triggerToast('success', `Fournisseur "${newFournisseur.nomComplet}" validé !`);
-            logActivity('Ajout', 'Fournisseurs', `Création de la fiche du fournisseur "${newFournisseur.nomComplet}"`, cleanFournisseur);
-        } catch (err) {
-            triggerToast('error', "Échec de l'enregistrement du fournisseur.");
-        }
-    };
-
-    const executeDeleteClient = async (id: number) => {
-        const client = clients.find(c => c.id === id);
-        try {
-            await dbDeleteDoc('clients', id);
-            setClients(clients.filter(c => c.id !== id));
-            triggerToast('success', `Client "${client?.name || id}" révoqué !`);
-            logActivity('Suppression', 'Clients', `Suppression définitive du client "${client?.name || id}" (ID: ${id})`);
-        } catch (err) {
-            triggerToast('error', "Échec de la suppression du client.");
-        }
-    };
-
-    const handleDeleteClient = (id: number) => {
-        const client = clients.find(c => c.id === id);
-        const name = client?.name || `ID ${id}`;
-        setConfirmModal({
-            isOpen: true,
-            title: 'Supprimer ce client ?',
-            message: `Êtes-vous sûr de vouloir supprimer définitivement le client "${name}" ? Cette action supprimera tous ses enregistrements et est irréversible.`,
-            onConfirm: () => executeDeleteClient(id)
-        });
-    };
-
-    const executeDeleteCase = async (id: string) => {
-        const d = cases.find(c => c.id === id);
-        try {
-            await dbDeleteDoc('cases', id);
-            setCases(cases.filter(c => c.id !== id));
-            triggerToast('success', `Dossier "${d?.name || id}" archivé !`);
-            logActivity('Suppression', 'Dossiers', `Archivage / Suppression du dossier "${d?.name || id}" (Réf: ${id})`);
-        } catch (err) {
-            triggerToast('error', "Impossible d'archiver le dossier.");
-        }
-    };
-
-    const handleDeleteCase = (id: string) => {
-        const c = cases.find(item => item.id === id);
-        const name = c?.name || id;
-        setConfirmModal({
-            isOpen: true,
-            title: 'Archiver ce dossier ?',
-            message: `Voulez-vous vraiment ranger ou archiver définitivement le dossier "${name}" ?`,
-            onConfirm: () => executeDeleteCase(id)
-        });
-    };
-
-    const executeDeleteAvocat = async (id: string) => {
-        const a = avocats.find(x => x.id === id);
-        try {
-            await dbDeleteDoc('avocats', id);
-            setAvocats(avocats.filter(a => a.id !== id));
-            triggerToast('success', `Départ de l'avocat "${a?.fullName || id}" acté !`);
-            logActivity('Suppression', 'Collaborateurs', `Suppression du profil de l'avocat ${a?.fullName || id}`);
-        } catch (err) {
-            triggerToast('error', "Échec de la désinscription de l'avocat.");
-        }
-    };
-
-    const handleDeleteAvocat = (id: string) => {
-        const avocat = avocats.find(item => item.id === id);
-        const name = avocat?.fullName || id;
-        setConfirmModal({
-            isOpen: true,
-            title: "Retirer l'avocat du cabinet ?",
-            message: `Êtes-vous sûr de vouloir révoquer l'accès et supprimer la fiche de l'avocat "${name}" ?`,
-            onConfirm: () => executeDeleteAvocat(id)
-        });
-    };
-
-    const executeDeletePersonnel = async (id: string) => {
-        const p = personnels.find(x => x.id === id);
-        try {
-            await dbDeleteDoc('personnels', id);
-            setPersonnels(personnels.filter(p => p.id !== id));
-            triggerToast('success', `Agent administratif "${p?.fullName || id}" retiré !`);
-            logActivity('Suppression', 'Personnel', `Suppression de la fiche de l'agent administratif "${p?.fullName || id}"`);
-        } catch (err) {
-            triggerToast('error', "Échec de suppression de l'agent.");
-        }
-    };
-
-    const handleDeletePersonnel = (id: string) => {
-        const person = personnels.find(item => item.id === id);
-        const name = person?.fullName || id;
-        setConfirmModal({
-            isOpen: true,
-            title: "Retirer l'agent administratif ?",
-            message: `Voulez-vous vraiment retirer l'agent administratif "${name}" du registre ?`,
-            onConfirm: () => executeDeletePersonnel(id)
-        });
-    };
-
-    const executeDeleteFournisseur = async (id: string) => {
-        const f = fournisseurs.find(x => x.id === id);
-        try {
-            await dbDeleteDoc('fournisseurs', id);
-            setFournisseurs(fournisseurs.filter(f => f.id !== id));
-            triggerToast('success', `Fournisseur "${f?.nomComplet || id}" retiré avec succès.`);
-            logActivity('Suppression', 'Fournisseurs', `Suppression définitive du fournisseur "${f?.nomComplet || id}"`);
-        } catch (err) {
-            triggerToast('error', "Échec de retrait du fournisseur.");
-        }
-    };
-
-    const handleDeleteFournisseur = (id: string) => {
-        const f = fournisseurs.find(item => item.id === id);
-        const name = f?.nomComplet || id;
-        setConfirmModal({
-            isOpen: true,
-            title: "Supprimer le fournisseur ?",
-            message: `Voulez-vous rompre la fiche et supprimer le fournisseur "${name}" ?`,
-            onConfirm: () => executeDeleteFournisseur(id)
-        });
-    };
-
-    const executeDeleteEvent = async (id: string) => {
-        const ev = events.find(e => e.id === id);
-        try {
-            await dbDeleteDoc('events', id);
-            setEvents(events.filter(e => e.id !== id));
-            triggerToast('success', `Événement "${ev?.name || id}" déprogrammé.`);
-            logActivity('Suppression', 'Agenda', `Annulation de l'événement "${ev?.name || id}"`);
-        } catch (err) {
-            triggerToast('error', "Échec d'annulation de l'événement.");
-        }
-    };
-
-    const handleDeleteEvent = (id: string) => {
-        const ev = events.find(item => item.id === id);
-        const name = ev?.name || id;
-        setConfirmModal({
-            isOpen: true,
-            title: "Déprogrammer l'événement ?",
-            message: `Souhaitez-vous vraiment déprogrammer l'événement "${name}" ?`,
-            onConfirm: () => executeDeleteEvent(id)
-        });
-    };
-
-    const executeDeleteTask = async (id: number) => {
-        const t = tasks.find(x => x.id === id);
-        try {
-            await dbDeleteDoc('tasks', id);
-            setTasks(tasks.filter(t => t.id !== id));
-            triggerToast('success', `Tâche "${t?.name || id}" supprimée.`);
-        } catch (err) {
-            triggerToast('error', "Échec d'annulation de la tâche.");
-        }
-    };
-
-    const handleDeleteTask = (id: number) => {
-        const t = tasks.find(item => item.id === id);
-        const name = t?.name || `ID ${id}`;
-        setConfirmModal({
-            isOpen: true,
-            title: "Supprimer la tâche ?",
-            message: `Voulez-vous supprimer définitivement la tâche "${name}" ?`,
-            onConfirm: () => executeDeleteTask(id)
-        });
-    };
-
-    const executeDeleteInvoice = async (id: string) => {
-        try {
-            await dbDeleteDoc('invoices', id);
-            setInvoices(invoices.filter(i => i.id !== id));
-            triggerToast('success', `Facture "${id}" éliminée !`);
-        } catch (err) {
-            triggerToast('error', "Échec d'annulation de la facture.");
-        }
-    };
-
-    const handleDeleteInvoice = (id: string) => {
-        setConfirmModal({
-            isOpen: true,
-            title: "Supprimer la facture ?",
-            message: `Voulez-vous vraiment supprimer définitivement la facture "${id}" ? Cette action est irréversible.`,
-            onConfirm: () => executeDeleteInvoice(id)
-        });
-    };
-
-    const handleUpdateClient = async (updated: Client) => {
-        try {
-            const { id, ...properties } = updated;
-            await dbUpdateDoc('clients', id, properties);
-            setClients(prev => prev.map(c => c.id === updated.id ? updated : c));
-            triggerToast('success', `Données du client "${updated.name}" sauvegardées !`);
-        } catch (err) {
-            triggerToast('error', "Échec lors de la mise à jour.");
-        }
-    };
-
-    const handleUpdateCase = async (updated: Case) => {
-        try {
-            const { id, ...properties } = updated;
-            const clean = {
-                ...properties,
-                procedures: Array.isArray(updated.procedures) ? updated.procedures : []
-            };
-            await dbUpdateDoc('cases', id, clean);
-            setCases(prev => prev.map(c => c.id === updated.id ? updated : c));
-            triggerToast('success', `Modifications du dossier "${updated.name}" validées !`);
-        } catch (err) {
-            triggerToast('error', "Erreur lors de la mise à jour.");
-        }
-    };
-
-    const handleUpdateAvocat = async (updated: Avocat) => {
-        try {
-            const { id, ...properties } = updated;
-            const clean = { ...properties, photo: null };
-            await dbUpdateDoc('avocats', id, clean);
-            setAvocats(prev => prev.map(a => a.id === updated.id ? updated : a));
-            triggerToast('success', `Profil de l'avocat "${updated.fullName}" ajusté !`);
-        } catch (err) {
-            triggerToast('error', "Échec de restructuration de la fiche.");
-        }
-    };
-
-    const handleUpdatePersonnel = async (updated: Personnel) => {
-        try {
-            const { id, ...properties } = updated;
-            await dbUpdateDoc('personnels', id, properties);
-            setPersonnels(prev => prev.map(p => p.id === updated.id ? updated : p));
-            triggerToast('success', `Modification de l'agent "${updated.fullName}" enregistrée !`);
-        } catch (err) {
-            triggerToast('error', "Impossible d'appliquer la correction.");
-        }
-    };
-
-    const handleUpdateInvoice = async (updated: Invoice) => {
-        try {
-            const { id, ...properties } = updated;
-            await dbUpdateDoc('invoices', id, properties);
-            setInvoices(prev => prev.map(i => i.id === updated.id ? updated : i));
-            triggerToast('success', `Données de la factures "${updated.id}" sauvegardées !`);
-        } catch (err) {
-            triggerToast('error', "Échec lors de la mise à jour de la facture.");
-        }
-    };
-
-    const handleUpdateFournisseur = async (updated: Fournisseur) => {
-        try {
-            const { id, ...properties } = updated;
-            await dbUpdateDoc('fournisseurs', id, properties);
-            setFournisseurs(prev => prev.map(f => f.id === updated.id ? updated : f));
-            triggerToast('success', `Données du fournisseur "${updated.nomComplet}" sauvegardées !`);
-        } catch (err) {
-            triggerToast('error', "Échec lors de la mise à jour du fournisseur.");
-        }
-    };
-
-    const filteredClients = clients.filter(c => 
-        (c.name || (c as any).nom || (c as any).clientName || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-        (c.contact || (c as any).phone || (c as any).email || '').toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    const filteredCases = cases.filter(c => 
-        String(c.id || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-        (c.name || (c as any).nom || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-        (c.client || (c as any).clientName || '').toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    const filteredEvents = events.filter(e => 
-        (e.name || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-        (e.type || '').toLowerCase().includes(searchQuery.toLowerCase()) || 
-        (e.lieu || '').toLowerCase().includes(searchQuery.toLowerCase())
-    );
-
-    const isAssocietOrAdmin = () => {
-        const roleObj = currentUserObj?.role?.toLowerCase() || '';
-        const roleInfo = currentUserInfo?.role?.toLowerCase() || '';
-        const combined = `${roleObj} ${roleInfo}`;
-        return combined.includes('admin') || combined.includes('directeur') || combined.includes('associé') || combined.includes('partner') || combined.includes('associet') || currentUserObj?.role === 'Admin';
-    };
+    const lawyerNames = avocats.map((a) => a.fullName);
 
     const renderPage = () => {
         const pageProps = {
-            clients: filteredClients, 
-            cases: filteredCases, 
-            events: filteredEvents, 
-            tasks, invoices, avocats, lawyerNames, personnels, fournisseurs,
+            clients, cases, events, tasks, invoices, avocats, lawyerNames, personnels, fournisseurs,
             onAddClient: handleAddClient, onAddCase: handleAddCase, onAddEvent: handleAddEvent,
             onAddTask: handleAddTask, onAddInvoice: handleAddInvoice, onAddAvocat: handleAddAvocat, onAddPersonnel: handleAddPersonnel, onAddFournisseur: handleAddFournisseur,
             onDeleteClient: handleDeleteClient, onDeleteCase: handleDeleteCase, onDeleteAvocat: handleDeleteAvocat, onDeletePersonnel: handleDeletePersonnel, onDeleteFournisseur: handleDeleteFournisseur,
             onDeleteEvent: handleDeleteEvent, onDeleteTask: handleDeleteTask, onDeleteInvoice: handleDeleteInvoice,
-            onExportClients: handleExportClients, onExportCases: handleExportCases,
             onUpdateClient: handleUpdateClient, onUpdateCase: handleUpdateCase, onUpdateAvocat: handleUpdateAvocat, onUpdatePersonnel: handleUpdatePersonnel, onUpdateEvent: handleUpdateEvent, onUpdateTask: handleUpdateTask, onUpdateInvoice: handleUpdateInvoice, onUpdateFournisseur: handleUpdateFournisseur,
             onSendEmail: triggerEmail,
-            onExportBackup: handleExportBackup,
         };
 
-        const restrictedPages = ['Facturation', 'Gestion', 'AuditLogs'];
-        if (restrictedPages.includes(currentPage) && !isAssocietOrAdmin()) {
-            return (
-                <div className="flex flex-col items-center justify-center py-20 px-4 text-center bg-white dark:bg-[#0c111d] rounded-2xl border border-gray-100 dark:border-slate-800 shadow-md max-w-2xl mx-auto my-10 transition-all duration-300 hover:scale-[1.01]">
-                    <div className="w-16 h-16 rounded-full bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 flex items-center justify-center mb-6 shadow-xs border border-rose-100 dark:border-rose-900/30">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-8 h-8">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
-                        </svg>
-                    </div>
-                    <h2 className="text-2xl font-extrabold text-gray-800 dark:text-slate-100 mb-2 tracking-tight">
-                        Espace Restreint — {currentPage === 'Facturation' ? 'Facturation' : currentPage === 'AuditLogs' ? "Journal d'Audit" : 'Gestion Cabinet'}
-                    </h2>
-                    <p className="text-sm text-gray-500 dark:text-slate-400 max-w-md leading-relaxed mb-6 font-medium">
-                        Désolé, l'accès à cette section est réservé exclusivement aux <strong>Avocats Associés</strong> et aux membres de la Direction Générale du cabinet.
-                    </p>
-                    <div className="px-4 py-2.5 bg-slate-50 dark:bg-slate-900 rounded-xl border border-slate-150 dark:border-slate-800/80 text-xs text-gray-600 dark:text-slate-400 font-semibold shadow-inner">
-                        Votre rôle actuel : <span className="font-extrabold text-[#15447c] dark:text-indigo-400 uppercase tracking-wider ml-1">{currentUserInfo?.role || "Collaborateur"}</span>
-                    </div>
-                </div>
-            );
-        }
-
         switch (currentPage) {
-            case 'Dashboard': return <ProtectedGuard user={currentUserObj} currentUserInfo={currentUserInfo} moduleKey="dashboard"><DashboardPage clients={filteredClients} cases={filteredCases} events={filteredEvents} tasks={tasks} invoices={invoices} avocats={avocats} onUpdateTaskStatus={handleUpdateTaskStatus} onAddTask={handleAddTask} /></ProtectedGuard>;
-            case 'AIAssistant': return <ProtectedGuard user={currentUserObj} currentUserInfo={currentUserInfo} moduleKey="ai"><AIAssistantPage clients={filteredClients} cases={filteredCases} tasks={tasks} invoices={invoices} /></ProtectedGuard>;
-            case 'Clients': return <ProtectedGuard user={currentUserObj} currentUserInfo={currentUserInfo} moduleKey="clients"><ClientsPage clients={filteredClients} cases={cases} invoices={invoices} tasks={tasks} onAddClient={handleAddClient} onExport={handleExportClients} onSendEmail={triggerEmail} /></ProtectedGuard>;
-            case 'Dossiers': return <ProtectedGuard user={currentUserObj} currentUserInfo={currentUserInfo} moduleKey="cases"><CasesPage cases={filteredCases} clients={filteredClients} tasks={tasks} invoices={invoices} onAddCase={handleAddCase} onExport={handleExportCases} avocats={avocats} onSendEmail={triggerEmail} onNavigate={(page, query) => { setCurrentPage(page); if (query) setSearchQuery(query); }} /></ProtectedGuard>;
-            case 'Procedures': return <ProtectedGuard user={currentUserObj} currentUserInfo={currentUserInfo} moduleKey="procedures"><ProceduresPage cases={cases} onUpdateCase={handleUpdateCase} searchQuery={searchQuery} setSearchQuery={setSearchQuery} /></ProtectedGuard>;
-            case 'Evenements': return <ProtectedGuard user={currentUserObj} currentUserInfo={currentUserInfo} moduleKey="events"><EventsPage events={filteredEvents} onAddEvent={handleAddEvent} onUpdateEvent={handleUpdateEvent} avocats={avocats} personnels={personnels} onSendEmail={triggerEmail} /></ProtectedGuard>;
-            case 'Agenda': return <ProtectedGuard user={currentUserObj} currentUserInfo={currentUserInfo} moduleKey="agenda"><AgendaPage tasks={tasks} cases={filteredCases} lawyers={lawyerNames} avocats={avocats} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} events={filteredEvents} onSendEmail={triggerEmail} /></ProtectedGuard>;
-            case 'Chat': return (
-                <ProtectedGuard user={currentUserObj} currentUserInfo={currentUserInfo} moduleKey="chat">
-                    <ChatPage 
-                        avocats={avocats}
-                        personnels={personnels}
-                        currentUserInfo={currentUserInfo}
-                        presences={presences}
-                    />
-                </ProtectedGuard>
-            );
-            case 'Correspondance': return (
-                <ProtectedGuard user={currentUserObj} currentUserInfo={currentUserInfo} moduleKey="correspondance">
-                    <CorrespondancePage 
-                        clients={filteredClients} 
-                        cases={filteredCases} 
-                        avocats={avocats} 
-                        onSendEmail={triggerEmail} 
-                        currentUserInfo={currentUserInfo} 
-                    />
-                </ProtectedGuard>
-            );
-            case 'Facturation': return <ProtectedGuard user={currentUserObj} currentUserInfo={currentUserInfo} moduleKey="billing"><BillingPage invoices={invoices} cases={filteredCases} onAddInvoice={handleAddInvoice} onSendEmail={triggerEmail} clients={clients} /></ProtectedGuard>;
-            case 'Avocats': return <ProtectedGuard user={currentUserObj} currentUserInfo={currentUserInfo} moduleKey="avocats"><AvocatsPage avocats={avocats} tasks={tasks} onAddAvocat={handleAddAvocat} onSendEmail={triggerEmail} correspondances={correspondances} /></ProtectedGuard>;
-            case 'Personnels': return <ProtectedGuard user={currentUserObj} currentUserInfo={currentUserInfo} moduleKey="personnels"><PersonnelsPage personnels={personnels} onAddPersonnel={handleAddPersonnel} onDeletePersonnel={handleDeletePersonnel} onSendEmail={triggerEmail} /></ProtectedGuard>;
-            case 'Fournisseurs': return <ProtectedGuard user={currentUserObj} currentUserInfo={currentUserInfo} moduleKey="suppliers"><FournisseursPage fournisseurs={fournisseurs} onAddFournisseur={handleAddFournisseur} onDeleteFournisseur={handleDeleteFournisseur} onSendEmail={triggerEmail} /></ProtectedGuard>;
-            case 'Gestion': return <ProtectedGuard user={currentUserObj} currentUserInfo={currentUserInfo} moduleKey="gestion_cabinet"><GestionPage {...pageProps} currentUser={currentUserObj} onSendEmail={triggerEmail} onAddToast={triggerToast} /></ProtectedGuard>;
-            case 'AuditLogs': return <ProtectedGuard user={currentUserObj} currentUserInfo={currentUserInfo} moduleKey="audit"><AuditLogsPage logs={logs} /></ProtectedGuard>;
-            case 'All': return <AllInterfacesPage {...pageProps} />;
-            default: return <DashboardPage clients={filteredClients} cases={filteredCases} events={filteredEvents} tasks={tasks} invoices={invoices} avocats={avocats} onUpdateTaskStatus={handleUpdateTaskStatus} onAddTask={handleAddTask} />;
+            case 'Dashboard': return <DashboardPage clients={clients} cases={cases} events={events} tasks={tasks} invoices={invoices} avocats={avocats} onUpdateTaskStatus={handleUpdateTaskStatus} onAddTask={handleAddTask} />;
+            case 'Clients': return <ClientsPage clients={clients} cases={cases} invoices={invoices} tasks={tasks} onAddClient={handleAddClient} onSendEmail={triggerEmail} />;
+            case 'Dossiers': return <CasesPage cases={cases} clients={clients} tasks={tasks} invoices={invoices} onAddCase={handleAddCase} avocats={avocats} onSendEmail={triggerEmail} onNavigate={setCurrentPage} />;
+            case 'Procedures': return <ProceduresPage cases={cases} onUpdateCase={handleUpdateCase} searchQuery={''} setSearchQuery={() => {}} />;
+            case 'Evenements': return <EventsPage events={events} onAddEvent={handleAddEvent} onUpdateEvent={handleUpdateEvent} avocats={avocats} personnels={personnels} onSendEmail={triggerEmail} />;
+            case 'Agenda': return <AgendaPage tasks={tasks} cases={cases} lawyers={lawyerNames} avocats={avocats} onAddTask={handleAddTask} onUpdateTask={handleUpdateTask} events={events} onSendEmail={triggerEmail} />;
+            case 'Chat': return <ChatPage avocats={avocats} personnels={personnels} currentUserInfo={currentUserInfo} presences={presences} />;
+            case 'Correspondance': return <CorrespondancePage clients={clients} cases={cases} avocats={avocats} onSendEmail={triggerEmail} currentUserInfo={currentUserInfo} />;
+            case 'Facturation': return <BillingPage invoices={invoices} cases={cases} onAddInvoice={handleAddInvoice} onSendEmail={triggerEmail} clients={clients} />;
+            case 'Avocats': return <AvocatsPage avocats={avocats} tasks={tasks} onAddAvocat={handleAddAvocat} onSendEmail={triggerEmail} correspondances={correspondances} />;
+            case 'Personnels': return <PersonnelsPage personnels={personnels} onAddPersonnel={handleAddPersonnel} onDeletePersonnel={handleDeletePersonnel} onSendEmail={triggerEmail} />;
+            case 'Fournisseurs': return <FournisseursPage fournisseurs={fournisseurs} onAddFournisseur={handleAddFournisseur} onDeleteFournisseur={handleDeleteFournisseur} onSendEmail={triggerEmail} />;
+            case 'Gestion': return <GestionPage {...pageProps} currentUser={currentUserObj} onSendEmail={triggerEmail} onAddToast={triggerToast} />;
+            case 'AuditLogs': return <AuditLogsPage logs={logs} />;
+            case 'AIAssistant': return <AIAssistantPage clients={clients} cases={cases} tasks={tasks} invoices={invoices} />;
+            default: return <DashboardPage clients={clients} cases={cases} events={events} tasks={tasks} invoices={invoices} avocats={avocats} onUpdateTaskStatus={handleUpdateTaskStatus} onAddTask={handleAddTask} />;
         }
     };
 
-    if (!isAuthenticated) {
-        return <LoginPage onLoginSuccess={handleLoginSuccess} />;
-    }
+    if (!isAuthenticated) return <LoginPage onLoginSuccess={handleLoginSuccess} />;
 
     return (
         <div className="flex h-screen bg-gray-100 dark:bg-[#070b13] font-sans overflow-hidden transition-colors duration-300">
             <Sidebar currentPage={currentPage} setCurrentPage={setCurrentPage} onLogout={handleLogout} currentUserInfo={currentUserInfo} currentUser={currentUserObj} isOpen={isSidebarOpen} onClose={() => setIsSidebarOpen(false)} />
             <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
                 <Header 
-                    searchQuery={searchQuery} 
-                    setSearchQuery={setSearchQuery} 
-                    clients={clients} 
-                    cases={cases} 
-                    events={events} 
-                    setCurrentPage={setCurrentPage} 
-                    isDarkMode={isDarkMode}
-                    setIsDarkMode={setIsDarkMode}
-                    currentUserInfo={currentUserInfo}
-                    onLogout={handleLogout}
-                    onMenuToggle={() => setIsSidebarOpen(true)}
+                    searchQuery={searchQuery} setSearchQuery={setSearchQuery}
+                    clients={clients} cases={cases} events={events}
+                    setCurrentPage={setCurrentPage} isDarkMode={isDarkMode} setIsDarkMode={setIsDarkMode}
+                    currentUserInfo={currentUserInfo} onLogout={handleLogout} onMenuToggle={() => setIsSidebarOpen(true)}
                     isDbConnected={isDbConnected}
                 />
                 <main className="flex-1 overflow-x-hidden overflow-y-auto p-4 sm:p-6 lg:p-8 custom-scrollbar relative">
-                    {renderPage()}
+                    {!isSyncComplete ? (
+                        <div className="flex items-center justify-center h-full">
+                            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#15447c]"></div>
+                        </div>
+                    ) : renderPage()}
                 </main>
             </div>
 
-            {/* Micro-Interaction Toast Notifications Overlay */}
-            <div className="fixed bottom-5 right-5 space-y-3 z-50 pointer-events-none">
+            {/* Toasts & Modals */}
+            <div className="fixed bottom-5 right-5 space-y-3 z-50">
                 <AnimatePresence>
-                    {toasts.map((toast) => {
-                        const isSync = toast.text.includes("Synchronisation");
-                        const isDeleted = toast.text.includes("supprim") || toast.text.includes("retir") || toast.text.includes("révoqu") || toast.text.includes("élimin") || toast.text.includes("déprogramm");
-                        const isUpdate = toast.text.includes("mis à jour") || toast.text.includes("sauvegard") || toast.text.includes("valid") || toast.text.includes("ajust") || toast.text.includes("modific");
-
-                        let title = "Enregistrement réussi !";
-                        if (toast.type === 'error') {
-                            title = "Échec de l'opération";
-                        } else if (isSync) {
-                            title = "Synchronisation Firestore";
-                        } else if (isDeleted) {
-                            title = "Suppression réussie";
-                        } else if (isUpdate) {
-                            title = "Mise à jour réussie";
-                        }
-
-                        return (
-                            <motion.div
-                                key={toast.id}
-                                initial={{ opacity: 0, y: 50, scale: 0.9 }}
-                                animate={{ opacity: 1, y: 0, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.8, transition: { duration: 0.25 } }}
-                                className={`p-4 rounded-2xl shadow-2xl pointer-events-auto flex items-start space-x-3 text-white max-w-sm border backdrop-blur-md ${
-                                    toast.type === 'success' 
-                                        ? 'bg-slate-900/95 border-emerald-500/50 text-emerald-550 shadow-emerald-950/30' 
-                                        : 'bg-slate-900/95 border-rose-500/50 text-rose-550 shadow-rose-950/30'
-                                }`}
-                            >
-                                <span className={`flex-shrink-0 text-lg flex items-center justify-center p-2 rounded-xl ${
-                                    toast.type === 'success' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-rose-500/20 text-rose-400'
-                                }`}>
-                                    {toast.type === 'success' ? (
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-4 h-4">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                                        </svg>
-                                    ) : (
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={3} stroke="currentColor" className="w-4 h-4">
-                                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
-                                        </svg>
-                                    )}
-                                </span>
-                                <div className="space-y-0.5">
-                                    <h4 className={`text-xs font-black tracking-wide ${
-                                        toast.type === 'success' ? 'text-emerald-400' : 'text-rose-400'
-                                    }`}>
-                                        {title}
-                                    </h4>
-                                    <p className="text-[11px] font-medium text-slate-300 leading-normal">
-                                        {toast.text}
-                                    </p>
-                                </div>
-                            </motion.div>
-                        );
-                    })}
+                    {toasts.map((t) => (
+                        <motion.div key={t.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} className={`p-4 rounded-xl text-white shadow-lg ${t.type === 'success' ? 'bg-emerald-600' : 'bg-rose-600'}`}>
+                            {t.text}
+                        </motion.div>
+                    ))}
                 </AnimatePresence>
             </div>
 
-            {/* Modal de Confirmation de Suppression */}
             <AnimatePresence>
                 {confirmModal.isOpen && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-                        {/* Backdrop */}
-                        <motion.div
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            exit={{ opacity: 0 }}
-                            onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                            className="absolute inset-0 bg-slate-900/60 backdrop-blur-md cursor-pointer"
-                        />
-                        
-                        {/* Modal Contenu */}
-                        <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            transition={{ type: "spring", duration: 0.4 }}
-                            className="bg-white rounded-3xl border border-rose-100 shadow-2xl relative w-full max-w-md overflow-hidden z-10 p-6 flex flex-col pointer-events-auto"
-                        >
-                            {/* Alert Icon & Heading */}
-                            <div className="flex items-start space-x-4 mb-4">
-                                <span className="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 border border-rose-100 shadow-sm animate-pulse">
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-6 h-6">
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                                    </svg>
-                                </span>
-                                <div className="flex-1 min-w-0">
-                                    <h3 className="text-base font-black text-slate-950 tracking-tight">
-                                        {confirmModal.title}
-                                    </h3>
-                                    <p className="text-xs text-slate-500 font-semibold mt-1.5 leading-relaxed">
-                                        {confirmModal.message}
-                                    </p>
-                                </div>
-                            </div>
-
-                            {/* Actions Group */}
-                            <div className="flex items-center justify-end space-x-2 mt-4 bg-slate-50 -mx-6 -mb-6 p-4 border-t border-slate-150">
-                                <button
-                                    onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
-                                    className="px-4 py-2.5 text-xs font-black text-slate-600 rounded-xl bg-white hover:bg-slate-100 transition border border-slate-200 active:scale-95 cursor-pointer"
-                                >
-                                    Annuler
-                                </button>
-                                <button
-                                    onClick={() => {
-                                        confirmModal.onConfirm();
-                                        setConfirmModal(prev => ({ ...prev, isOpen: false }));
-                                    }}
-                                    className="px-5 py-2.5 text-xs font-black text-white rounded-xl bg-rose-600 hover:bg-rose-700 shadow-lg shadow-rose-600/15 active:scale-95 transition cursor-pointer"
-                                >
-                                    Confirmer la suppression
-                                </button>
-                            </div>
-                        </motion.div>
-                    </div>
-                )}
-            </AnimatePresence>
-
-            {/* Alarm Reminder Ringing Dialog Interface */}
-            <AnimatePresence>
-                {activeAlarmTask && (
-                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/80 backdrop-blur-md">
-                        <motion.div 
-                            initial={{ scale: 0.9, opacity: 0 }}
-                            animate={{ scale: 1, opacity: 1 }}
-                            exit={{ scale: 0.9, opacity: 0 }}
-                            className="bg-white rounded-3xl shadow-2xl p-6 max-w-md w-full border border-red-100 overflow-hidden text-center relative"
-                        >
-                            {/* Animated ring glowing stripe */}
-                            <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-red-500 via-orange-500 to-red-500" />
-                            
-                            <div className="my-6 relative flex justify-center">
-                                <span className="absolute inline-flex h-20 w-20 rounded-full bg-red-100 opacity-75 animate-ping" />
-                                <div className="relative flex items-center justify-center w-20 h-20 rounded-full bg-red-500 text-white shadow-lg shadow-red-500/30">
-                                    <svg className="w-10 h-10 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2.5}>
-                                        <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0M3.124 7.5A8.967 8.967 0 015.292 3m13.416 4.5a8.967 8.967 0 00-2.168-4.5" />
-                                    </svg>
-                                </div>
-                            </div>
-
-                            <span className="inline-block px-3 py-1 bg-red-50 text-red-700 font-extrabold text-[10px] tracking-widest uppercase rounded-full border border-red-100">
-                                Rappel de Tâche Actif
-                            </span>
-
-                            <h3 className="text-xl font-bold text-gray-900 mt-4 leading-tight">
-                                {activeAlarmTask.name}
-                            </h3>
-
-                            <p className="text-xs text-slate-500 mt-2 font-semibold flex items-center justify-center gap-1">
-                                <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-                                Responsable: <span className="text-gray-800 font-bold">{activeAlarmTask.lawyer}</span>
-                            </p>
-
-                            {activeAlarmTask.notes && (
-                                <div className="mt-3 p-3 bg-slate-50 rounded-xl border border-gray-150 text-left w-full">
-                                    <span className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider block mb-1">Notes de tâche :</span>
-                                    <p className="text-xs text-gray-650 italic leading-relaxed">
-                                        {activeAlarmTask.notes}
-                                    </p>
-                                </div>
-                            )}
-
-                            {/* Alarm Actions */}
-                            <div className="mt-8 grid grid-cols-2 gap-3 pb-2">
-                                <button
-                                    onClick={handleSnoozeAlarm}
-                                    className="bg-slate-100 hover:bg-slate-200 text-gray-800 font-extrabold text-xs py-3.5 px-4 rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm border border-slate-200 active:scale-95 cursor-pointer"
-                                    id="btn-alarm-snooze"
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                    Répéter (+5 min)
-                                </button>
-                                <button
-                                    onClick={handleDismissAlarm}
-                                    className="bg-red-600 hover:bg-red-700 text-white font-extrabold text-xs py-3.5 px-4 rounded-xl shadow-lg shadow-red-600/15 transition flex items-center justify-center gap-1.5 active:scale-95 cursor-pointer"
-                                    id="btn-alarm-dismiss"
-                                >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
-                                    Éteindre
-                                </button>
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50">
+                        <motion.div initial={{ scale: 0.9 }} animate={{ scale: 1 }} className="bg-white p-6 rounded-2xl max-w-sm w-full">
+                            <h3 className="text-lg font-bold mb-2">{confirmModal.title}</h3>
+                            <p className="text-sm text-gray-500 mb-6">{confirmModal.message}</p>
+                            <div className="flex justify-end gap-3">
+                                <button onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))} className="px-4 py-2 text-sm">Annuler</button>
+                                <button onClick={() => { confirmModal.onConfirm(); setConfirmModal(prev => ({ ...prev, isOpen: false })); }} className="px-4 py-2 text-sm bg-rose-600 text-white rounded-lg">Confirmer</button>
                             </div>
                         </motion.div>
                     </div>
                 )}
             </AnimatePresence>
             
-            <EmailComposerModal 
-                isOpen={emailConfig.isOpen}
-                onClose={() => setEmailConfig(prev => ({ ...prev, isOpen: false }))}
-                defaultTo={emailConfig.to}
-                defaultSubject={emailConfig.subject}
-                defaultBody={emailConfig.body}
-                recipientName={emailConfig.recipientName}
-                attachmentName={emailConfig.attachmentName}
-            />
+            <EmailComposerModal isOpen={emailConfig.isOpen} onClose={() => setEmailConfig(prev => ({ ...prev, isOpen: false }))} defaultTo={emailConfig.to} defaultSubject={emailConfig.subject} defaultBody={emailConfig.body} />
         </div>
     );
 }

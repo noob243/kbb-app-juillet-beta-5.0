@@ -324,25 +324,60 @@ export async function dbCreateAuditLog(log: Omit<AuditLog, 'id' | 'timestamp'>):
 }
 
 /**
- * Diagnostic tool to verify direct Firestore write capability.
+ * Comprehensive diagnostic tool to verify CRUD Firestore capabilities.
  */
 export async function testFirestoreConnection() {
-    console.log("--- STARTING FIRESTORE CONNECTION TEST ---");
-    const testId = `test_${Date.now()}`;
+    console.log("--- STARTING COMPREHENSIVE FIRESTORE CONNECTION TEST ---");
+    const testId = `diag_${Date.now()}`;
     const testDoc = doc(db, 'connection_tests', testId);
+
     try {
-        console.log(`Attempting to write test document to connection_tests/${testId}...`);
+        // 1. WRITE TEST
+        console.log(`[1/4] Testing WRITE: connection_tests/${testId}...`);
         await setDoc(testDoc, {
-            status: 'success',
+            status: 'testing',
+            step: 'create',
             timestamp: new Date().toISOString(),
             userAgent: navigator.userAgent,
             authUid: auth.currentUser?.uid || 'anonymous-pending'
         });
-        console.log("✅ FIRESTORE WRITE SUCCESSFUL!");
+        console.log("✅ WRITE SUCCESSFUL");
+
+        // 2. READ TEST
+        console.log(`[2/4] Testing READ: connection_tests/${testId}...`);
+        const snap = await getDoc(testDoc);
+        if (!snap.exists()) {
+            throw new Error("Document was written but could not be read back (not found).");
+        }
+        console.log("✅ READ SUCCESSFUL:", snap.data());
+
+        // 3. UPDATE TEST
+        console.log(`[3/4] Testing UPDATE: connection_tests/${testId}...`);
+        await updateDoc(testDoc, {
+            status: 'success',
+            step: 'updated',
+            lastUpdate: new Date().toISOString()
+        });
+        const updatedSnap = await getDoc(testDoc);
+        if (updatedSnap.data()?.status !== 'success') {
+            throw new Error("Update operation failed to persist correctly.");
+        }
+        console.log("✅ UPDATE SUCCESSFUL");
+
+        // 4. DELETE TEST
+        console.log(`[4/4] Testing DELETE: connection_tests/${testId}...`);
+        await deleteDoc(testDoc);
+        const deletedSnap = await getDoc(testDoc);
+        if (deletedSnap.exists()) {
+            throw new Error("Delete operation failed: document still exists.");
+        }
+        console.log("✅ DELETE SUCCESSFUL");
+
+        console.log("--- ALL FIRESTORE TESTS PASSED SUCCESSFULLY! ---");
         return true;
     } catch (error: any) {
-        console.error("❌ FIRESTORE WRITE FAILED:", error);
-        console.error("Error Code:", error.code);
+        console.error("❌ FIRESTORE TEST FAILED:", error);
+        console.error("Failed at specific step. Error Code:", error.code);
         console.error("Error Message:", error.message);
         return false;
     }
