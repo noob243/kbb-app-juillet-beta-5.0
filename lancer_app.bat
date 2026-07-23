@@ -1,30 +1,59 @@
 @echo off
+setlocal
 title KBB App - Lancement Local
+
 echo ======================================================
 echo   KBB APP - SYSTEME DE GESTION JURIDIQUE (BETA 5.1)
 echo ======================================================
 echo.
-echo [1/3] Verification de l'environnement...
+
+:: 1. Vérification de Node.js
+echo [1/3] Verification de Node.js...
 node -v >nul 2>&1
 if %errorlevel% neq 0 (
-    echo [ERREUR] Node.js n'est pas installe sur cette machine.
-    echo Veuillez l'installer depuis https://nodejs.org/
-    pause
-    exit /b
+    echo [ERREUR] Node.js n'est pas installe.
+    echo Veuillez l'installer sur https://nodejs.org/
+    goto :error
 )
 
-echo [2/3] Verification des modules...
+:: 2. Vérification de npm
+echo [2/3] Verification de npm...
+call npm -v >nul 2>&1
+if %errorlevel% neq 0 (
+    echo [ERREUR] npm n'est pas reconnu comme commande interne.
+    goto :error
+)
+
+:: 3. Installation si node_modules absent
 if not exist "node_modules\" (
-    echo Installation des dependances en cours (patientez)...
+    echo [INFO] node_modules absent. Installation des dependances...
     call npm install
+    if %errorlevel% neq 0 (
+        echo [ERREUR] L'installation des dependances a echoue.
+        goto :error
+    )
 )
 
-echo [3/3] Demarrage du serveur de developpement...
+:: 4. Lancement
+echo [3/3] Demarrage du serveur...
 echo.
 echo ------------------------------------------------------
-echo  L'APPLICATION SERA PRETE DANS QUELQUES SECONDES
 echo  URL : http://localhost:3000
+echo  Appuyez sur CTRL+C pour arreter le serveur.
 echo ------------------------------------------------------
 echo.
-npm run dev
+call npm run dev
+if %errorlevel% neq 0 (
+    echo [ERREUR] Impossible de lancer le serveur de developpement.
+    goto :error
+)
+
+goto :end
+
+:error
+echo.
+echo Le processus s'est arrete avec une erreur.
 pause
+
+:end
+endlocal
