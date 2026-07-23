@@ -133,16 +133,7 @@ export function hasPermission(user: AppUser | null, moduleKey: ModuleKey): boole
   if (!user) return false;
   if (user.isDeleted) return false;
   
-  // Admin / Directeur / Associé bypass - full administrative access
-  const roleLower = (user.role || '').toLowerCase();
-  const isAdminOrDirecteur = user.role === 'Admin' ||
-    roleLower.includes('admin') ||
-    roleLower.includes('directeur') ||
-    roleLower.includes('associé') ||
-    roleLower.includes('partner') ||
-    roleLower.includes('associet');
-  
-  if (isAdminOrDirecteur) return true;
+  if (user.role === 'Admin') return true;
 
   if (!user.hasAppAccess && user.personnelCategory === 'Office') return false;
 
@@ -154,15 +145,8 @@ export function filterNavItemsByPermissions<T extends { name: string; isGroup?: 
   user: AppUser | null
 ): T[] {
   if (!user) return [];
-  const roleLower = (user.role || '').toLowerCase();
-  const isAdminOrDirecteur = user.role === 'Admin' ||
-    roleLower.includes('admin') ||
-    roleLower.includes('directeur') ||
-    roleLower.includes('associé') ||
-    roleLower.includes('partner') ||
-    roleLower.includes('associet');
-
-  if (isAdminOrDirecteur) return items; // Admin and Directeur see all items
+  
+  if (user.role === 'Admin') return items;
 
   const routeToModuleMap: Record<string, ModuleKey> = {
     'Dashboard': 'dashboard',
@@ -185,7 +169,7 @@ export function filterNavItemsByPermissions<T extends { name: string; isGroup?: 
   };
 
   return items.filter(item => {
-    if (item.name === 'All') return isAdminOrDirecteur;
+    if (item.name === 'All') return user.role === 'Admin';
     if (item.isGroup && item.subItems) {
       const allowedSubs = item.subItems.filter(sub => {
         const mod = routeToModuleMap[sub.name];

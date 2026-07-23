@@ -1,5 +1,5 @@
+
 import React, { useState, useEffect } from 'react';
-import { usePersistentState } from './hooks/usePersistentState';
 import { initialClients, initialCases, initialEvents, initialTasks, initialInvoices, initialAvocats, initialPersonnels, initialFournisseurs } from './data/mockData';
 
 import Sidebar from './components/Sidebar';
@@ -44,17 +44,17 @@ import {
 } from './lib/firestoreService.ts';
 import { motion, AnimatePresence } from 'motion/react';
 import EmailComposerModal from './components/modals/EmailComposerModal';
-import { ProtectedGuard } from './components/auth/ProtectedGuard';
-import { getLocalUsers } from './services/userService';
-import { AppUser, ModuleKey } from './types/rbac';
-import { ALL_MODULE_PERMISSIONS } from './services/rbacService';
+import { ProtectedGuard } from './components/auth/ProtectedGuard.tsx';
+import { getLocalUsers } from './services/userService.ts';
+import { AppUser, ModuleKey } from './types/rbac.ts';
+import { ALL_MODULE_PERMISSIONS } from './services/rbacService.ts';
 
 declare const jspdf: any;
 
 function App() {
-    const [isAuthenticated, setIsAuthenticated] = usePersistentState('kbb_auth', false);
-    const [currentUserInfo, setCurrentUserInfo] = usePersistentState<{ name: string; role: string; email: string } | null>('kbb_currentUserInfo', null);
-    const [currentUserObj, setCurrentUserObj] = usePersistentState<AppUser | null>('kbb_currentUserObj', null);
+    const [isAuthenticated, setIsAuthenticated] = useState(false);
+    const [currentUserInfo, setCurrentUserInfo] = useState<{ name: string; role: string; email: string } | null>(null);
+    const [currentUserObj, setCurrentUserObj] = useState<AppUser | null>(null);
     const [currentPage, setCurrentPage] = useState('Dashboard');
 
     useEffect(() => {
@@ -99,14 +99,14 @@ function App() {
     const stopActiveAlarmRef = React.useRef<(() => void) | null>(null);
     
     // Core collection states backed by localStorage for offline fast fallback, and updated by real-time Firestore synchronization
-    const [clients, setClients] = usePersistentState<Client[]>('kbb_clients', []);
-    const [cases, setCases] = usePersistentState<Case[]>('kbb_cases', []);
-    const [events, setEvents] = usePersistentState<Event[]>('kbb_events', []);
-    const [tasks, setTasks] = usePersistentState<Task[]>('kbb_tasks', []);
-    const [invoices, setInvoices] = usePersistentState<Invoice[]>('kbb_invoices', []);
-    const [avocats, setAvocats] = usePersistentState<Avocat[]>('kbb_avocats', []);
-    const [personnels, setPersonnels] = usePersistentState<Personnel[]>('kbb_personnels', []);
-    const [fournisseurs, setFournisseurs] = usePersistentState<Fournisseur[]>('kbb_fournisseurs', []);
+    const [clients, setClients] = useState<Client[]>([]);
+    const [cases, setCases] = useState<Case[]>([]);
+    const [events, setEvents] = useState<Event[]>([]);
+    const [tasks, setTasks] = useState<Task[]>([]);
+    const [invoices, setInvoices] = useState<Invoice[]>([]);
+    const [avocats, setAvocats] = useState<Avocat[]>([]);
+    const [personnels, setPersonnels] = useState<Personnel[]>([]);
+    const [fournisseurs, setFournisseurs] = useState<Fournisseur[]>([]);
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [correspondances, setCorrespondances] = useState<Correspondance[]>([]);
     const [presences, setPresences] = useState<{ [email: string]: any }>({});
@@ -114,7 +114,7 @@ function App() {
     const [isDbConnected, setIsDbConnected] = useState(false);
     const [isSyncComplete, setIsSyncComplete] = useState(false);
     const [isSyncing, setIsSyncing] = useState(false);
-    const [isDarkMode, setIsDarkMode] = usePersistentState('kbb_darkMode', false);
+    const [isDarkMode, setIsDarkMode] = useState(false);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
     useEffect(() => {
@@ -208,77 +208,7 @@ function App() {
     // 2. Synchronize local storage data (including offline inserts) to Cloud Firestore on connection
     useEffect(() => {
         if (!isDbConnected) return;
-        const performDataSync = async () => {
-            setIsSyncing(true);
-            try {
-                // One-time automatic cleanup of default mock data to start clean
-                const alreadyCleared = localStorage.getItem('kbb_mock_data_cleared');
-                let activeClients = clients;
-                let activeCases = cases;
-                let activeEvents = events;
-                let activeTasks = tasks;
-                let activeInvoices = invoices;
-                let activeAvocats = avocats;
-                let activePersonnels = personnels;
-                let activeFournisseurs = fournisseurs;
-
-                if (alreadyCleared !== 'true') {
-                    console.log("Cabinet startup: Clearing local storage and forcing cloud fetch...");
-                    
-                    // Clear local storage backups
-                    localStorage.removeItem('kbb_clients');
-                    localStorage.removeItem('kbb_cases');
-                    localStorage.removeItem('kbb_events');
-                    localStorage.removeItem('kbb_tasks');
-                    localStorage.removeItem('kbb_invoices');
-                    localStorage.removeItem('kbb_avocats');
-                    localStorage.removeItem('kbb_personnels');
-                    localStorage.removeItem('kbb_fournisseurs');
-
-                    localStorage.setItem('kbb_mock_data_cleared', 'true');
-
-                    // Reset local state variables to empty lists
-                    activeClients = [];
-                    activeCases = [];
-                    activeEvents = [];
-                    activeTasks = [];
-                    activeInvoices = [];
-                    activeAvocats = [];
-                    activePersonnels = [];
-                    activeFournisseurs = [];
-
-                    setClients([]);
-                    setCases([]);
-                    setEvents([]);
-                    setTasks([]);
-                    setInvoices([]);
-                    setAvocats([]);
-                    setPersonnels([]);
-                    setFournisseurs([]);
-                }
-
-                console.log("Synchronizing all local states with Firestore...");
-                
-                await syncLocalCollection('clients', activeClients);
-                await syncLocalCollection('cases', activeCases);
-                await syncLocalCollection('events', activeEvents);
-                await syncLocalCollection('tasks', activeTasks);
-                await syncLocalCollection('invoices', activeInvoices);
-                await syncLocalCollection('avocats', activeAvocats);
-                await syncLocalCollection('personnels', activePersonnels);
-                await syncLocalCollection('fournisseurs', activeFournisseurs);
-                
-                triggerToast('success', 'Synchronisation avec Firestore réussie !');
-                setIsSyncComplete(true);
-            } catch (err) {
-                console.error("Local records database synchronization failed on startup:", err);
-                triggerToast('error', 'Échec lors de la synchronisation de certains enregistrements.');
-                setIsSyncComplete(true); // Allow user session to continue anyway
-            } finally {
-                setIsSyncing(false);
-            }
-        };
-        performDataSync();
+        setIsSyncComplete(true);
     }, [isDbConnected]);
 
     // Task reminder observer and notification checker loops
@@ -511,7 +441,7 @@ function App() {
         } catch (syncError) {
             console.error("Firestore synchronizers preparation failed:", syncError);
         }
-    }, [isDbConnected]);
+    }, [isDbConnected, isSyncComplete]);
 
     // Manage user presence status in Firestore
     useEffect(() => {
