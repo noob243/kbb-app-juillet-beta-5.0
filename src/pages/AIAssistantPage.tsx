@@ -3,7 +3,6 @@ import React, { FC, useState, useRef, useEffect, useMemo } from 'react';
 import { GoogleGenAI } from "@google/genai";
 import { AIIcon } from '../components/Icons';
 import { Client, Case, Task, Invoice } from '../types';
-import { usePersistentState } from '../hooks/usePersistentState';
 
 interface AIAssistantPageProps {
     clients: Client[];
@@ -32,8 +31,8 @@ const AIAssistantPage: FC<AIAssistantPageProps> = ({ clients, cases, tasks, invo
         feedback: null
     };
 
-    const [conversations, setConversations] = usePersistentState<Conversation[]>('kbb_ai_history', []);
-    const [isDarkMode, setIsDarkMode] = usePersistentState<boolean>('kbb_ai_dark_mode', false);
+    const [conversations, setConversations] = useState<Conversation[]>([]);
+    const [isDarkMode, setIsDarkMode] = useState<boolean>(false);
     const [currentConvId, setCurrentConvId] = useState<string | null>(null);
     const [isHistoryOpen, setIsHistoryOpen] = useState(false);
     
