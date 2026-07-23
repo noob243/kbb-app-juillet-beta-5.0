@@ -6,30 +6,21 @@ import firebaseConfigJson from '../firebase-applet-config.json';
 const config = firebaseConfigJson || {};
 
 const firebaseConfig = {
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || config.projectId || "app-data-base-kbb-2026",
-  appId: import.meta.env.VITE_FIREBASE_APP_ID || config.appId || "1:316612502367:web:6175cdddbba834aca5ccea",
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || config.apiKey || "AIzaSyBjNHsojvR4gP9EqTqIvp3OGJZIpiYm2YU",
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || config.authDomain || "app-data-base-kbb-2026.firebaseapp.com",
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || config.storageBucket || "app-data-base-kbb-2026.appspot.com",
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || config.messagingSenderId || "316612502367",
-  firestoreDatabaseId: import.meta.env.VITE_FIREBASE_DATABASE_ID || config.firestoreDatabaseId || "(default)",
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY || config.apiKey,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN || config.authDomain,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID || config.projectId,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET || config.storageBucket,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID || config.messagingSenderId,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID || config.appId,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID || config.measurementId
 };
 
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
-
-console.log("Firebase App Initialized:", app.name);
-console.log("Firestore Project ID:", firebaseConfig.projectId);
-
-// Handle both "(default)" and "default" as the default database
-const dbId = firebaseConfig.firestoreDatabaseId;
+const dbId = import.meta.env.VITE_FIREBASE_DATABASE_ID || config.firestoreDatabaseId;
 const isDefault = !dbId || dbId === '(default)' || dbId === 'default';
 
 export const db = isDefault ? getFirestore(app) : getFirestore(app, dbId);
-
-console.log("Firestore Database Instance assigned (ID:", isDefault ? "(default)" : dbId, ")");
 export const auth = getAuth(app);
 export const googleAuthProvider = new GoogleAuthProvider();
 
 export { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut, signInWithPopup };
-
-
