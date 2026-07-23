@@ -28,12 +28,6 @@ interface ChatPageProps {
     presences: { [email: string]: any };
 }
 
-const defaultAdminsList = [
-    { email: 'admin@cabinet.com', name: 'Administrateur Cabinet', role: 'Directeur Associé KBB' },
-    { email: 'jeremieshusu4@gmail.com', name: 'Jérémie Shusu', role: 'Admin Principal' },
-    { email: 'hervemich@icloud.com', name: 'Hervé Mich', role: 'Admin Principal' }
-];
-
 const ChatPage: FC<ChatPageProps> = ({ avocats, personnels, currentUserInfo, presences }) => {
     // Nav Tabs
     const [activeTab, setActiveTab] = useState<'direct' | 'forum'>('direct');
@@ -42,16 +36,7 @@ const ChatPage: FC<ChatPageProps> = ({ avocats, personnels, currentUserInfo, pre
     const getRegisteredUsers = () => {
         const usersMap = new Map<string, { name: string; role: string; email: string }>();
 
-        // 1. Add default admins
-        defaultAdminsList.forEach(admin => {
-            usersMap.set(admin.email.toLowerCase().trim(), {
-                name: admin.name,
-                role: admin.role,
-                email: admin.email.toLowerCase().trim()
-            });
-        });
-
-        // 2. Add avocats
+        // 1. Add avocats
         if (avocats && Array.isArray(avocats)) {
             avocats.forEach(av => {
                 const email = av.emails && av.emails[0] ? av.emails[0].toLowerCase().trim() : (av.email || '').toLowerCase().trim();
@@ -65,7 +50,7 @@ const ChatPage: FC<ChatPageProps> = ({ avocats, personnels, currentUserInfo, pre
             });
         }
 
-        // 3. Add personnels
+        // 2. Add personnels
         if (personnels && Array.isArray(personnels)) {
             personnels.forEach(p => {
                 const email = (p.email || '').toLowerCase().trim();
@@ -122,84 +107,7 @@ const ChatPage: FC<ChatPageProps> = ({ avocats, personnels, currentUserInfo, pre
     const [newReplyText, setNewReplyText] = useState('');
 
     // Preloaded robust French-jurisprudential legal team topics State
-    const [forumTopics, setForumTopics] = useState<ForumTopic[]>([
-        {
-            id: 1,
-            title: "Nouvelle jurisprudence sur les licenciements collectifs",
-            category: "Jurisprudence",
-            author: "Jean-Luc Tshisekedi",
-            role: "Avocat Associé",
-            date: "28 Mai 2026, 10:15",
-            content: "Chers confrères, avez-vous pris connaissance du dernier arrêt de la Cour de Cassation concernant les nouveaux barèmes d'indemnisation ? Cela pourrait impacter durablement notre dossier de défense pour Congo Invest SARL.",
-            replies: [
-                {
-                    id: 101,
-                    author: "Marie-Claire Mobutu",
-                    role: "Avocate Collaboratrice",
-                    text: "Oui, Jean-Luc. J'allais justement t'en parler. Cet arrêt clarifie que le barème ne s'applique pas en cas de violation caractérisée d'un droit fondamental.",
-                    time: "Aujourd'hui à 11:30"
-                },
-                {
-                    id: 102,
-                    author: "Moi",
-                    role: "Avocat(e) Titulaire",
-                    text: "Je propose de rédiger et d'annexer une note de synthèse claire pour la joindre aux pièces de plaidoirie de Congo Invest.",
-                    time: "Aujourd'hui à 14:15",
-                    isMe: true
-                },
-                {
-                    id: 103,
-                    author: "Patrick Lumumba",
-                    role: "Avocat Stagiaire",
-                    text: "Excellente idée ! Je m'occupe dès ce soir d'imprimer l'arrêt complet de la Cour suprême et de surligner les attendus déterminants pour notre argumentaire.",
-                    time: "Aujourd'hui à 15:45"
-                }
-            ]
-        },
-        {
-            id: 2,
-            title: "Projets de numérisation complète du Tribunal de Grande Instance (TGI)",
-            category: "Administration",
-            author: "Félicité Kanku",
-            role: "Secrétaire Juridique",
-            date: "27 Mai 2026, 09:12",
-            content: "Bonjour à tous, le secrétariat du greffe a annoncé que le TGI va mettre en route sa nouvelle plateforme d'envoi d'actes dématérialisés dès le mois prochain. Une formation pratique d'une heure en visioconférence aura lieu ce vendredi à 10h pour faciliter l'adoption.",
-            replies: [
-                {
-                    id: 201,
-                    author: "Marie-Claire Mobutu",
-                    role: "Avocate Collaboratrice",
-                    text: "Merci Félicité d'avoir relayé cette information ! Je viens de m'inscrire. Ce guichet électronique va nous faire gagner un temps précieux lors des dépôts d'actes complémentaires.",
-                    time: "Hier à 11:30"
-                }
-            ]
-        },
-        {
-            id: 3,
-            title: "Demande d'aide : Modèle de bail commercial OHADA",
-            category: "Entraide",
-            author: "Patrick Lumumba",
-            role: "Avocat Stagiaire",
-            date: "26 Mai 2026, 14:00",
-            content: "Hello l'équipe, est-ce que quelqu'un aurait sous la main un exemple de contrat de bail commercial OHADA mis à jour avec la législation relative à la révision triennale des loyers réels ? C'est très urgent pour finaliser l'acte de BCC.",
-            replies: [
-                {
-                    id: 301,
-                    author: "Jean-Luc Tshisekedi",
-                    role: "Avocat Associé",
-                    text: "Patrick, consulte le sous-dossier partagé 'Modèles types > Actes'. J'y ai publié un modèle complet intégrant la jurisprudence OHADA sur l'indexation, validé le mois dernier.",
-                    time: "26 Mai 2026 à 14:45"
-                },
-                {
-                    id: 302,
-                    author: "Patrick Lumumba",
-                    role: "Avocat Stagiaire",
-                    text: "Trouvé ! Merci infiniment maître, c'est parfaitement rédigé et cela me débloque entièrement.",
-                    time: "26 Mai 2026 à 15:10"
-                }
-            ]
-        }
-    ]);
+    const [forumTopics, setForumTopics] = useState<ForumTopic[]>([]);
 
     // Send direct message action
     const handleSendMessage = (e: React.FormEvent) => {

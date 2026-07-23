@@ -87,22 +87,11 @@ const DashboardPage: FC<DashboardPageProps> = ({ clients, cases, events, tasks =
     const [qDueDate, setQDueDate] = useState(new Date().toISOString().substring(0, 10));
 
     const lawyersList = Array.from(new Set(tasks.map(t => t.lawyer).filter(Boolean)));
-    if (lawyersList.length === 0) {
-        lawyersList.push('Me. Katako', 'Me. Badjoko', 'Me. Bakenda', 'Me. Shusu');
-    }
 
     // Performance & Financial data processing
     const todayStr = new Date().toISOString().substring(0, 10);
 
-    const activeAvocats = (avocats && avocats.length > 0) 
-        ? avocats 
-        : lawyersList.map((name, i) => ({
-            id: `AV-${i + 1}`,
-            fullName: name,
-            cabinetRole: 'Avocat Collaborateur',
-            serviceStatus: 'Actif' as const,
-            cabinetStatus: 'Junior' as const
-        }));
+    const activeAvocats = (avocats && avocats.length > 0) ? avocats : [];
 
     const lawyersStats = activeAvocats.map(av => {
         const lawyerTasks = tasks.filter(t => {
