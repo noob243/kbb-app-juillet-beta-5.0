@@ -185,9 +185,8 @@ const Sidebar: FC<SidebarProps> = ({ currentPage, setCurrentPage, onLogout, curr
                         <img
                             src={logoSidebar}
                             alt="Logo KBB"
-                            className="w-12 h-12 mr-3 object-contain"
+                            className="w-12 h-12 object-contain"
                         />
-                        <span>KBB App</span>
                     </div>
                     {onClose && (
                         <button 
