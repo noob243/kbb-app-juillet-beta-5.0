@@ -61,40 +61,36 @@ function App() {
         if (currentUserInfo?.email) {
             const users = getLocalUsers();
             const found = users.find(u => u.email.toLowerCase() === currentUserInfo.email.toLowerCase());
-            const roleLower = (currentUserInfo.role || '').toLowerCase();
-            const isAdminOrDirecteur = currentUserInfo.role === 'Admin' ||
-                roleLower.includes('admin') ||
-                roleLower.includes('directeur') ||
-                roleLower.includes('associé') ||
-                roleLower.includes('partner') ||
-                roleLower.includes('associet') ||
-                currentUserInfo.email === 'jeremieshusu4@gmail.com' ||
-                currentUserInfo.email === 'hervemich@icloud.com' ||
-                currentUserInfo.email === 'admin@cabinet.com';
 
             if (found) {
+                setCurrentUserObj(found);
+            } else {
+                const roleLower = (currentUserInfo.role || '').toLowerCase();
+                const isAdminOrDirecteur = currentUserInfo.role === 'Admin' ||
+                    roleLower.includes('admin') ||
+                    roleLower.includes('directeur') ||
+                    roleLower.includes('associé') ||
+                    roleLower.includes('partner') ||
+                    roleLower.includes('associet') ||
+                    currentUserInfo.email === 'jeremieshusu4@gmail.com' ||
+                    currentUserInfo.email === 'hervemich@icloud.com' ||
+                    currentUserInfo.email === 'admin@cabinet.com';
+
                 if (isAdminOrDirecteur) {
                     setCurrentUserObj({
-                        ...found,
+                        id: 'admin-default',
+                        email: currentUserInfo.email,
+                        fullName: currentUserInfo.name,
                         role: 'Admin',
-                        permissions: ALL_MODULE_PERMISSIONS.map(m => m.key)
+                        userType: 'Avocat',
+                        functionRole: currentUserInfo.role,
+                        hasAppAccess: true,
+                        permissions: ALL_MODULE_PERMISSIONS.map(m => m.key),
+                        createdAt: new Date().toISOString(),
+                        isDeleted: false,
+                        status: 'Actif'
                     });
-                } else {
-                    setCurrentUserObj(found);
                 }
-            } else if (isAdminOrDirecteur) {
-                setCurrentUserObj({
-                    id: 'admin-default',
-                    email: currentUserInfo.email,
-                    fullName: currentUserInfo.name,
-                    role: 'Admin',
-                    personnelCategory: 'Administratif',
-                    hasAppAccess: true,
-                    permissions: ALL_MODULE_PERMISSIONS.map(m => m.key),
-                    createdAt: new Date().toISOString(),
-                    isDeleted: false,
-                    status: 'Actif'
-                });
             }
         }
     }, [currentUserInfo]);
@@ -103,14 +99,14 @@ function App() {
     const stopActiveAlarmRef = React.useRef<(() => void) | null>(null);
     
     // Core collection states backed by localStorage for offline fast fallback, and updated by real-time Firestore synchronization
-    const [clients, setClients] = usePersistentState<Client[]>('kbb_clients', initialClients);
-    const [cases, setCases] = usePersistentState<Case[]>('kbb_cases', initialCases);
-    const [events, setEvents] = usePersistentState<Event[]>('kbb_events', initialEvents);
-    const [tasks, setTasks] = usePersistentState<Task[]>('kbb_tasks', initialTasks);
-    const [invoices, setInvoices] = usePersistentState<Invoice[]>('kbb_invoices', initialInvoices);
-    const [avocats, setAvocats] = usePersistentState<Avocat[]>('kbb_avocats', initialAvocats);
-    const [personnels, setPersonnels] = usePersistentState<Personnel[]>('kbb_personnels', initialPersonnels);
-    const [fournisseurs, setFournisseurs] = usePersistentState<Fournisseur[]>('kbb_fournisseurs', initialFournisseurs);
+    const [clients, setClients] = usePersistentState<Client[]>('kbb_clients', []);
+    const [cases, setCases] = usePersistentState<Case[]>('kbb_cases', []);
+    const [events, setEvents] = usePersistentState<Event[]>('kbb_events', []);
+    const [tasks, setTasks] = usePersistentState<Task[]>('kbb_tasks', []);
+    const [invoices, setInvoices] = usePersistentState<Invoice[]>('kbb_invoices', []);
+    const [avocats, setAvocats] = usePersistentState<Avocat[]>('kbb_avocats', []);
+    const [personnels, setPersonnels] = usePersistentState<Personnel[]>('kbb_personnels', []);
+    const [fournisseurs, setFournisseurs] = usePersistentState<Fournisseur[]>('kbb_fournisseurs', []);
     const [logs, setLogs] = useState<AuditLog[]>([]);
     const [correspondances, setCorrespondances] = useState<Correspondance[]>([]);
     const [presences, setPresences] = useState<{ [email: string]: any }>({});
